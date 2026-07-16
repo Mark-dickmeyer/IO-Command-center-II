@@ -1,24 +1,66 @@
-// TEMPORARY DEV-ONLY SHIM
-// -------------------------------------------------------------------------
-// This app was originally built inside Claude, where `window.storage` is a
-// built-in API that saves data on Anthropic's servers and shares it between
-// everyone who opens the same published link.
+// This file replaces Claude's built-in `window.storage` with a real,
+// shared, permanent backend using Supabase (a hosted Postgres database).
 //
-// That API does not exist outside Claude. This file creates a stand-in
-// version of it, backed by your browser's localStorage, so the app runs
-// and you can click around during development.
+// It keeps the EXACT same get/set/delete/list shape that the rest of the
+// app already expects, so nothing in App.jsx needs to change.
 //
-// IMPORTANT: localStorage only lives in ONE browser on ONE device. It is
-// NOT shared between teammates and is NOT a real multi-user backend.
-// Before you deploy this for your team to use together, this file needs to
-// be replaced with real calls to a database (e.g. via a small API route
-// backed by Postgres, Supabase, etc.). Until then, treat this build as
-// "preview only" — good for checking the UI works, not for real team data.
-// -------------------------------------------------------------------------
+// HOW IT DECIDES WHAT TO USE:
+//   - If VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set (see README),
+//     it talks to your real Supabase database. This is shared between
+//     everyone who opens the app — the real, production behavior.
+//   - If those aren't set yet, it falls back to your browser's own local
+//     storage, purely so the app still loads and is clickable while you're
+//     getting Supabase set up. That fallback is NOT shared between people.
 
-if (typeof window !== "undefined" && !window.storage) {
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const TABLE = "app_storage";
+
+async function setupSupabaseStorage() {
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  window.storage = {
+    async get(key, shared = false) {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .select("value")
+        .eq("key", key)
+        .eq("shared", shared)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error(`Key not found: ${key}`);
+      return { key, value: data.value, shared };
+    },
+    async set(key, value, shared = false) {
+      const { error } = await supabase
+        .from(TABLE)
+        .upsert({ key, shared, value, updated_at: new Date().toISOString() }, { onConflict: "key,shared" });
+      if (error) throw error;
+      return { key, value, shared };
+    },
+    async delete(key, shared = false) {
+      const { error } = await supabase.from(TABLE).delete().eq("key", key).eq("shared", shared);
+      if (error) throw error;
+      return { key, deleted: true, shared };
+    },
+    async list(prefix = "", shared = false) {
+      let query = supabase.from(TABLE).select("key").eq("shared", shared);
+      if (prefix) query = query.like("key", `${prefix}%`);
+      const { data, error } = await query;
+      if (error) throw error;
+      return { keys: (data || []).map(r => r.key), prefix, shared };
+    },
+  };
+}
+
+function setupLocalFallbackStorage() {
+  console.warn(
+    "[storage] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set. " +
+    "Falling back to browser-only local storage — data will NOT be shared " +
+    "between teammates. See README.md to connect Supabase."
+  );
   const keyFor = (key, shared) => `scc-shim:${shared ? "shared" : "personal"}:${key}`;
-
   window.storage = {
     async get(key, shared = false) {
       const raw = localStorage.getItem(keyFor(key, shared));
@@ -41,4 +83,12 @@ if (typeof window !== "undefined" && !window.storage) {
       return { keys, prefix, shared };
     },
   };
+}
+
+if (typeof window !== "undefined" && !window.storage) {
+  if (supabaseUrl && supabaseKey) {
+    await setupSupabaseStorage();
+  } else {
+    setupLocalFallbackStorage();
+  }
 }
