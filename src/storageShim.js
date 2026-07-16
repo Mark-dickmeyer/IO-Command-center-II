@@ -85,7 +85,8 @@ function setupLocalFallbackStorage() {
   };
 }
 
-if (typeof window !== "undefined" && !window.storage) {
+export async function initStorage() {
+  if (typeof window === "undefined" || window.storage) return;
   if (supabaseUrl && supabaseKey) {
     await setupSupabaseStorage();
   } else {
