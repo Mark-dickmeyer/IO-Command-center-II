@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import {
   LayoutDashboard, Target, PhoneCall, CheckSquare, Layers, Settings as SettingsIcon,
   Plus, X, Trash2, TrendingUp, AlertCircle, DollarSign, UploadCloud, Check,
-  ArrowRight, RefreshCw, FileSpreadsheet, CheckCircle2, ArrowUpRight, ArrowDownRight, Minus, Building2
+  ArrowRight, RefreshCw, FileSpreadsheet, CheckCircle2, ArrowUpRight, ArrowDownRight, Minus, Building2, ChevronRight, Pencil
 } from "lucide-react";
 
 const STORAGE_KEY = "scc-data-v1";
@@ -51,14 +51,48 @@ const IMPORT_FIELDS = [
 ];
 
 const ACCOUNT_IMPORT_FIELDS = [
-  { key: "accountId", label: "Account ID", required: false },
-  { key: "name", label: "Account name", required: true },
-  { key: "currentCustomer", label: "Current Ahead customer (Y/N)", required: false },
-  { key: "mdPriority", label: "MD priority (Y/N)", required: false },
-  { key: "strategic", label: "Ahead strategic (Y/N)", required: false },
-  { key: "cd", label: "CD", required: false },
-  { key: "owner", label: "Owner / rep", required: false },
+  { key: "name", label: "Account", required: true },
+  { key: "territory", label: "Territory", required: false },
+  { key: "tier", label: "Tier", required: false },
+  { key: "priority", label: "Priority", required: false },
+  { key: "status", label: "Status", required: false },
+  { key: "cd", label: "AHEAD CD", required: false },
+  { key: "notes", label: "Notes", required: false },
+  { key: "flagServiceNow", label: "ServiceNow (X)", required: false },
+  { key: "flagDynatrace", label: "Dynatrace (X)", required: false },
+  { key: "flagDtDedicatedProg", label: "DT - Dedicated Prog (X)", required: false },
+  { key: "flagTaniumRevList", label: "Tanium Rev List (X)", required: false },
+  { key: "flagTaniumPtp", label: "Tanium PTP (X)", required: false },
+  { key: "flagTaniumTarget", label: "Tanium Target (X)", required: false },
+  { key: "flagGrafana", label: "Grafana (X)", required: false },
+  { key: "flagObservability", label: "Observability (X)", required: false },
+  { key: "snRep", label: "SN Rep", required: false },
+  { key: "snStatus", label: "SN Status", required: false },
+  { key: "snPriority", label: "SN Priority", required: false },
+  { key: "snContacts", label: "SN Contacts", required: false },
+  { key: "snNotes", label: "SN Notes", required: false },
+  { key: "dtRep", label: "DT Rep", required: false },
+  { key: "dtPsm", label: "PSM", required: false },
+  { key: "dtStatus", label: "DT Status", required: false },
+  { key: "dtPriority", label: "DT Priority", required: false },
+  { key: "dtContacts", label: "DT Contacts", required: false },
+  { key: "dtNotes", label: "DT Notes", required: false },
+  { key: "taniumRep", label: "Tanium Rep", required: false },
+  { key: "taniumStatus", label: "Tanium Status", required: false },
+  { key: "taniumPriority", label: "Tanium Priority", required: false },
+  { key: "taniumContacts", label: "Tanium Contacts", required: false },
+  { key: "taniumNotes", label: "Tanium Notes", required: false },
+  { key: "owner", label: "Owner / rep (for team scoping)", required: false },
 ];
+
+const ACCOUNT_TIERS = ["Enterprise", "Select", "Mid-Market"];
+const ACCOUNT_PRIORITIES = ["High", "Moderate", "Low"];
+const ACCOUNT_STATUSES = ["Active", "Not Active"];
+const VENDOR_STATUSES = ["Customer", "Prospect", "Active Conversations"];
+const VENDOR_STATUS_COLOR = { Customer: "#16A34A", Prospect: "#3B82F6", "Active Conversations": "#D97706" };
+const VENDOR_STATUS_BG = { Customer: "#DCFCE7", Prospect: "#DBEAFE", "Active Conversations": "#FEF3C7" };
+const ACCOUNT_GROUP_FIELD_LABEL = { cd: "CD", status: "Status", territory: "Territory", priority: "Priority", tier: "Tier" };
+const ACCOUNT_GROUP_ORDER = { priority: ACCOUNT_PRIORITIES, status: ACCOUNT_STATUSES, tier: ACCOUNT_TIERS };
 
 const TASK_IMPORT_FIELDS = [
   { key: "name", label: "Name", required: true },
@@ -69,7 +103,9 @@ const TASK_IMPORT_FIELDS = [
   { key: "dueDate", label: "Due date", required: false },
   { key: "status", label: "Status", required: false },
   { key: "sseSme", label: "SSE / SME", required: false },
+  { key: "partnerContact", label: "Partner Contact", required: false },
   { key: "isOpp", label: "Opp (marked if tied to an opportunity)", required: false },
+  { key: "dealReg", label: "Deal Reg?", required: false },
   { key: "notes", label: "Notes / Next Steps", required: false },
 ];
 
@@ -273,12 +309,24 @@ function useStore() {
         setLastSyncedAt(Date.now());
         return;
       } catch (e) {
+        // A "not found" style error just means nothing has ever been saved
+        // under this key yet — that's a normal, expected first-time state,
+        // NOT a failure. Only genuine errors (network, auth, etc.) should
+        // trigger retries and the visible warning banner.
+        const msg = (e && e.message ? e.message : String(e)).toLowerCase();
+        const isMissingKey = msg.includes("not found") || msg.includes("404") || msg.includes("no rows");
+        if (isMissingKey) {
+          setLoaded(true);
+          setLastSyncedAt(Date.now());
+          return;
+        }
         if (attempt < 2) {
           await new Promise(r => setTimeout(r, 1200));
           continue;
         }
-        // All retries failed. Do NOT silently show a blank slate as if it were
-        // genuinely empty — surface this so nobody mistakes a load failure for lost data.
+        // All retries failed on a genuine error. Do NOT silently show a blank
+        // slate as if it were empty — surface this so nobody mistakes a real
+        // load failure for lost data.
         setLoadError(true);
         setLoaded(true);
       }
@@ -601,7 +649,7 @@ function AccountAutocomplete({ accounts, value, onChange }) {
 function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
   const isEdit = !!(initial && initial.id);
   const [f, setF] = useState({
-    title: "", account: "", cd: "", sseSme: "", rep: reps[0] || "", dueDate: "",
+    title: "", account: "", cd: "", sseSme: "", partnerContact: "", dealReg: "", rep: reps[0] || "", dueDate: "",
     priority: "Moderate", status: "Not Started", isOpp: false, notes: "",
     ...(initial || {}),
   });
@@ -627,6 +675,14 @@ function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
         </Field>
         <Field label="SSE / SME">
           <input style={inputStyle} value={f.sseSme} onChange={e => set("sseSme", e.target.value)} placeholder="Technical resource" />
+        </Field>
+      </div>
+      <div style={rowStyle}>
+        <Field label="Partner Contact">
+          <input style={inputStyle} value={f.partnerContact} onChange={e => set("partnerContact", e.target.value)} placeholder="Partner-side contact" />
+        </Field>
+        <Field label="Deal Reg?">
+          <input style={inputStyle} value={f.dealReg} onChange={e => set("dealReg", e.target.value)} placeholder="e.g. TBD, Pending, Approved" />
         </Field>
       </div>
       <div style={rowStyle}>
@@ -725,22 +781,30 @@ function GoalForm({ initial, reps, period, onSave, onCancel, onDelete }) {
 // ---------- Account form ----------
 function AccountForm({ initial, reps, computed, tasks, onSave, onCancel, onDelete, onOpenTask, onAddTask }) {
   const [f, setF] = useState(initial || {
-    name: "", cd: "", rep: reps[0] || "", currentCustomer: false, mdPriority: false, strategic: false, notes: ""
+    name: "", territory: "", tier: "", priority: "Moderate", status: "Active", cd: "", rep: reps[0] || "", notes: "",
+    mdPriority: false, strategic: false, metCustomer: false,
+    flagServiceNow: false, flagDynatrace: false, flagDtDedicatedProg: false, flagTaniumRevList: false,
+    flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false,
+    snRep: "", snStatus: "", snPriority: "", snContacts: "", snNotes: "",
+    dtRep: "", dtPsm: "", dtStatus: "", dtPriority: "", dtContacts: "", dtNotes: "",
+    taniumRep: "", taniumStatus: "", taniumPriority: "", taniumContacts: "", taniumNotes: "",
   });
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
-  const checkboxRow = (key, label) => (
-    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.text, marginBottom: 10, cursor: "pointer" }}>
+  const flagLabel = (key, label) => (
+    <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.text, cursor: "pointer" }}>
       <input type="checkbox" checked={!!f[key]} onChange={e => set(key, e.target.checked)}
-        style={{ width: 15, height: 15, accentColor: C.green, cursor: "pointer" }} />
+        style={{ width: 14, height: 14, accentColor: C.green, cursor: "pointer" }} />
       {label}
     </label>
   );
+  const sectionHeader = (label, color) => (
+    <div style={{ fontSize: 12.5, fontWeight: 700, color: color || C.text, marginBottom: 10, marginTop: 18, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>{label}</div>
+  );
+
   return (
     <div>
       {computed && (
-        <div style={{
-          display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap"
-        }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
           <Pill color={computed.hasActiveOpp ? C.green : C.textMute} bg={computed.hasActiveOpp ? "#DCFCE7" : "#F1F5F9"}>
             {computed.hasActiveOpp ? "Active opportunity" : "No active opportunity"}
           </Pill>
@@ -749,27 +813,105 @@ function AccountForm({ initial, reps, computed, tasks, onSave, onCancel, onDelet
           </Pill>
         </div>
       )}
+
       <Field label="Account name">
         <input style={inputStyle} value={f.name} onChange={e => set("name", e.target.value)} placeholder="Company name" />
       </Field>
       <div style={rowStyle}>
-        <Field label="CD"><input style={inputStyle} value={f.cd} onChange={e => set("cd", e.target.value)} placeholder="Client / coverage director" /></Field>
-        <Field label="Rep">
+        <Field label="Territory"><input style={inputStyle} value={f.territory} onChange={e => set("territory", e.target.value)} placeholder="e.g. Michigan, Indiana" /></Field>
+        <Field label="Tier">
+          <select style={inputStyle} value={f.tier} onChange={e => set("tier", e.target.value)}>
+            <option value="">—</option>
+            {ACCOUNT_TIERS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={rowStyle}>
+        <Field label="Priority">
+          <select style={inputStyle} value={f.priority} onChange={e => set("priority", e.target.value)}>
+            {ACCOUNT_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </Field>
+        <Field label="Status">
+          <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
+            {ACCOUNT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={rowStyle}>
+        <Field label="AHEAD CD"><input style={inputStyle} value={f.cd} onChange={e => set("cd", e.target.value)} placeholder="Client / coverage director" /></Field>
+        <Field label="Rep (team scoping)">
           <select style={inputStyle} value={f.rep} onChange={e => set("rep", e.target.value)}>
             {reps.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </Field>
       </div>
-      <div style={{ background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
-        {checkboxRow("currentCustomer", "Current Ahead customer")}
-        {checkboxRow("mdPriority", "MD priority")}
-        {checkboxRow("strategic", "Ahead strategic")}
-      </div>
       <Field label="Notes">
         <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={f.notes} onChange={e => set("notes", e.target.value)} />
       </Field>
+
+      {sectionHeader("Practice flags")}
+      <div style={{
+        background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginBottom: 6,
+        display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10
+      }}>
+        {flagLabel("flagServiceNow", "ServiceNow")}
+        {flagLabel("flagDynatrace", "Dynatrace")}
+        {flagLabel("flagDtDedicatedProg", "DT - Dedicated Prog")}
+        {flagLabel("flagTaniumRevList", "Tanium Rev List")}
+        {flagLabel("flagTaniumPtp", "Tanium PTP")}
+        {flagLabel("flagTaniumTarget", "Tanium Target")}
+        {flagLabel("flagGrafana", "Grafana")}
+        {flagLabel("flagObservability", "Observability")}
+      </div>
+
+      {sectionHeader("ServiceNow", "#3B82F6")}
+      <div style={rowStyle}>
+        <Field label="SN Rep"><input style={inputStyle} value={f.snRep} onChange={e => set("snRep", e.target.value)} /></Field>
+        <Field label="SN Status">
+          <select style={inputStyle} value={f.snStatus} onChange={e => set("snStatus", e.target.value)}>
+            <option value="">—</option>
+            {VENDOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="SN Priority"><input style={inputStyle} value={f.snPriority} onChange={e => set("snPriority", e.target.value)} placeholder="e.g. High, Medium" /></Field>
+      <Field label="SN Contacts"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.snContacts} onChange={e => set("snContacts", e.target.value)} /></Field>
+      <Field label="SN Notes"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.snNotes} onChange={e => set("snNotes", e.target.value)} /></Field>
+
+      {sectionHeader("Dynatrace", "#7C3AED")}
+      <div style={rowStyle}>
+        <Field label="DT Rep"><input style={inputStyle} value={f.dtRep} onChange={e => set("dtRep", e.target.value)} /></Field>
+        <Field label="PSM"><input style={inputStyle} value={f.dtPsm} onChange={e => set("dtPsm", e.target.value)} /></Field>
+      </div>
+      <div style={rowStyle}>
+        <Field label="DT Status">
+          <select style={inputStyle} value={f.dtStatus} onChange={e => set("dtStatus", e.target.value)}>
+            <option value="">—</option>
+            {VENDOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="DT Priority"><input style={inputStyle} value={f.dtPriority} onChange={e => set("dtPriority", e.target.value)} placeholder="e.g. High, Moderate, Low" /></Field>
+      </div>
+      <Field label="DT Contacts"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.dtContacts} onChange={e => set("dtContacts", e.target.value)} /></Field>
+      <Field label="DT Notes"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.dtNotes} onChange={e => set("dtNotes", e.target.value)} /></Field>
+
+      {sectionHeader("Tanium", "#EA580C")}
+      <div style={rowStyle}>
+        <Field label="Tanium Rep"><input style={inputStyle} value={f.taniumRep} onChange={e => set("taniumRep", e.target.value)} /></Field>
+        <Field label="Tanium Status">
+          <select style={inputStyle} value={f.taniumStatus} onChange={e => set("taniumStatus", e.target.value)}>
+            <option value="">—</option>
+            {VENDOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="Tanium Priority"><input style={inputStyle} value={f.taniumPriority} onChange={e => set("taniumPriority", e.target.value)} placeholder="e.g. High, Moderate, Low, A, B" /></Field>
+      <Field label="Tanium Contacts"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.taniumContacts} onChange={e => set("taniumContacts", e.target.value)} /></Field>
+      <Field label="Tanium Notes"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.taniumNotes} onChange={e => set("taniumNotes", e.target.value)} /></Field>
+
       {initial && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 16, marginTop: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Tasks ({(tasks || []).length})</label>
             {onAddTask && (
@@ -1133,6 +1275,13 @@ function AccountImportWizard({ data, onClose, onApply }) {
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
 
+  const findHeaderRowIdx = (raw) => {
+    for (let i = 0; i < Math.min(raw.length, 6); i++) {
+      if ((raw[i] || []).some(c => String(c).trim().toLowerCase() === "account")) return i;
+    }
+    return 0;
+  };
+
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1144,12 +1293,25 @@ function AccountImportWizard({ data, onClose, onApply }) {
       try {
         let parsedRows = [];
         if (isCsv) {
-          const result = Papa.parse(evt.target.result, { header: true, skipEmptyLines: true });
-          parsedRows = result.data;
+          const raw = Papa.parse(evt.target.result, { skipEmptyLines: false }).data;
+          const headerRowIdx = findHeaderRowIdx(raw);
+          const hdrs = raw[headerRowIdx].map(h => String(h).trim());
+          parsedRows = raw.slice(headerRowIdx + 1).map(r => {
+            const obj = {};
+            hdrs.forEach((h, i) => { obj[h] = r[i] !== undefined ? r[i] : ""; });
+            return obj;
+          });
         } else {
           const wb = XLSX.read(evt.target.result, { type: "array", cellDates: false });
           const sheet = wb.Sheets[wb.SheetNames[0]];
-          parsedRows = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "" });
+          const raw = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "", header: 1 });
+          const headerRowIdx = findHeaderRowIdx(raw);
+          const hdrs = raw[headerRowIdx].map(h => String(h).trim());
+          parsedRows = raw.slice(headerRowIdx + 1).map(r => {
+            const obj = {};
+            hdrs.forEach((h, i) => { obj[h] = r[i] !== undefined ? r[i] : ""; });
+            return obj;
+          });
         }
         parsedRows = parsedRows.filter(r => Object.values(r).some(v => String(v).trim() !== ""));
         if (parsedRows.length === 0) { setError("No rows found in that file."); return; }
@@ -1161,12 +1323,37 @@ function AccountImportWizard({ data, onClose, onApply }) {
         const nextMap = {};
         ACCOUNT_IMPORT_FIELDS.forEach(f => {
           if (savedMap[f.key] && hdrs.includes(savedMap[f.key])) { nextMap[f.key] = savedMap[f.key]; return; }
-          if (f.key === "accountId") nextMap[f.key] = guessField(hdrs, ["account id", "record id", "id"]);
-          else if (f.key === "name") nextMap[f.key] = guessField(hdrs, ["account name", "name"], ["id"]);
-          else if (f.key === "currentCustomer") nextMap[f.key] = guessField(hdrs, ["current customer", "customer"]);
-          else if (f.key === "mdPriority") nextMap[f.key] = guessField(hdrs, ["md priority", "priority"]);
-          else if (f.key === "strategic") nextMap[f.key] = guessField(hdrs, ["strategic"]);
-          else if (f.key === "cd") nextMap[f.key] = guessField(hdrs, ["cd"]);
+          if (f.key === "name") nextMap[f.key] = guessField(hdrs, ["account"]);
+          else if (f.key === "territory") nextMap[f.key] = guessField(hdrs, ["territory"]);
+          else if (f.key === "tier") nextMap[f.key] = guessField(hdrs, ["tier"]);
+          else if (f.key === "priority") nextMap[f.key] = guessField(hdrs, ["priority"], ["sn ", "dt ", "tanium"]);
+          else if (f.key === "status") nextMap[f.key] = guessField(hdrs, ["status"], ["sn ", "dt ", "tanium"]);
+          else if (f.key === "cd") nextMap[f.key] = guessField(hdrs, ["ahead cd", "cd"]);
+          else if (f.key === "notes") nextMap[f.key] = guessField(hdrs, ["notes"], ["sn ", "dt ", "tanium"]);
+          else if (f.key === "flagServiceNow") nextMap[f.key] = guessField(hdrs, ["servicenow"], ["rep", "status", "priority", "contact", "note"]);
+          else if (f.key === "flagDynatrace") nextMap[f.key] = guessField(hdrs, ["dynatrace"], ["rep", "status", "priority", "contact", "note", "dedicated"]);
+          else if (f.key === "flagDtDedicatedProg") nextMap[f.key] = guessField(hdrs, ["dedicated prog"]);
+          else if (f.key === "flagTaniumRevList") nextMap[f.key] = guessField(hdrs, ["tanium rev list"]);
+          else if (f.key === "flagTaniumPtp") nextMap[f.key] = guessField(hdrs, ["tanium ptp"]);
+          else if (f.key === "flagTaniumTarget") nextMap[f.key] = guessField(hdrs, ["tanium target"]);
+          else if (f.key === "flagGrafana") nextMap[f.key] = guessField(hdrs, ["grafana"]);
+          else if (f.key === "flagObservability") nextMap[f.key] = guessField(hdrs, ["observability"]);
+          else if (f.key === "snRep") nextMap[f.key] = guessField(hdrs, ["sn rep"]);
+          else if (f.key === "snStatus") nextMap[f.key] = guessField(hdrs, ["sn status"]);
+          else if (f.key === "snPriority") nextMap[f.key] = guessField(hdrs, ["sn priority"]);
+          else if (f.key === "snContacts") nextMap[f.key] = guessField(hdrs, ["sn contact"]);
+          else if (f.key === "snNotes") nextMap[f.key] = guessField(hdrs, ["sn note"]);
+          else if (f.key === "dtRep") nextMap[f.key] = guessField(hdrs, ["dt rep"]);
+          else if (f.key === "dtPsm") nextMap[f.key] = guessField(hdrs, ["psm"]);
+          else if (f.key === "dtStatus") nextMap[f.key] = guessField(hdrs, ["dt status"]);
+          else if (f.key === "dtPriority") nextMap[f.key] = guessField(hdrs, ["dt priority"]);
+          else if (f.key === "dtContacts") nextMap[f.key] = guessField(hdrs, ["dt contact"]);
+          else if (f.key === "dtNotes") nextMap[f.key] = guessField(hdrs, ["dt note"]);
+          else if (f.key === "taniumRep") nextMap[f.key] = guessField(hdrs, ["tanium rep"]);
+          else if (f.key === "taniumStatus") nextMap[f.key] = guessField(hdrs, ["tanium status"]);
+          else if (f.key === "taniumPriority") nextMap[f.key] = guessField(hdrs, ["tanium priority"]);
+          else if (f.key === "taniumContacts") nextMap[f.key] = guessField(hdrs, ["tanium contact"]);
+          else if (f.key === "taniumNotes") nextMap[f.key] = guessField(hdrs, ["tanium note"]);
           else if (f.key === "owner") nextMap[f.key] = guessField(hdrs, ["owner", "rep"]);
         });
         setColMap(nextMap);
@@ -1179,10 +1366,21 @@ function AccountImportWizard({ data, onClose, onApply }) {
   };
 
   const requiredMapped = ACCOUNT_IMPORT_FIELDS.filter(f => f.required).every(f => colMap[f.key]);
+  const TEXT_FIELDS = ["territory", "tier", "priority", "status", "cd", "notes",
+    "snRep", "snStatus", "snPriority", "snContacts", "snNotes",
+    "dtRep", "dtPsm", "dtStatus", "dtPriority", "dtContacts", "dtNotes",
+    "taniumRep", "taniumStatus", "taniumPriority", "taniumContacts", "taniumNotes"];
+  const FLAG_FIELDS = ["flagServiceNow", "flagDynatrace", "flagDtDedicatedProg", "flagTaniumRevList", "flagTaniumPtp", "flagTaniumTarget", "flagGrafana", "flagObservability"];
+
+  const buildPatch = (r) => {
+    const patch = { name: (r[colMap.name] || "").toString().trim() };
+    TEXT_FIELDS.forEach(k => { if (colMap[k]) patch[k] = (r[colMap[k]] || "").toString().trim(); });
+    FLAG_FIELDS.forEach(k => { if (colMap[k]) patch[k] = toBool(r[colMap[k]]); });
+    return patch;
+  };
 
   const diff = useMemo(() => {
     if (step < 3) return null;
-    const byId = new Map(data.accounts.filter(a => a.accountId).map(a => [a.accountId, a]));
     const byName = new Map(data.accounts.map(a => [normName(a.name), a]));
     let added = 0, updated = 0;
     const newRepNames = new Set();
@@ -1190,17 +1388,14 @@ function AccountImportWizard({ data, onClose, onApply }) {
     rows.forEach(r => {
       const name = (r[colMap.name] || "").toString().trim();
       if (!name) return;
-      const accountId = colMap.accountId ? (r[colMap.accountId] || "").toString().trim() : "";
       const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
       if (owner && !knownReps.includes(owner)) newRepNames.add(owner);
-      const existing = (accountId && byId.get(accountId)) || byName.get(normName(name));
-      if (existing) updated++; else added++;
+      if (byName.has(normName(name))) updated++; else added++;
     });
     return { added, updated, newRepNames: Array.from(newRepNames), totalRows: rows.length };
   }, [step, rows, colMap, data]);
 
   const commit = () => {
-    const byId = new Map(data.accounts.filter(a => a.accountId).map(a => [a.accountId, a]));
     const byName = new Map(data.accounts.map(a => [normName(a.name), a]));
     let accounts = data.accounts.map(a => ({ ...a }));
     let regions = data.regions.map(r => ({ ...r }));
@@ -1218,38 +1413,25 @@ function AccountImportWizard({ data, onClose, onApply }) {
     rows.forEach(r => {
       const name = (r[colMap.name] || "").toString().trim();
       if (!name) return;
-      const accountId = colMap.accountId ? (r[colMap.accountId] || "").toString().trim() : "";
       const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
       if (owner && !knownReps.has(owner)) addUnassignedRep(owner);
+      const patch = buildPatch(r);
+      if (owner) patch.rep = owner;
 
-      const patch = {
-        name,
-        accountId: accountId || undefined,
-        currentCustomer: colMap.currentCustomer ? toBool(r[colMap.currentCustomer]) : undefined,
-        mdPriority: colMap.mdPriority ? toBool(r[colMap.mdPriority]) : undefined,
-        strategic: colMap.strategic ? toBool(r[colMap.strategic]) : undefined,
-        cd: colMap.cd ? (r[colMap.cd] || "").toString().trim() : undefined,
-        rep: owner || undefined,
-      };
-
-      const existing = (accountId && byId.get(accountId)) || byName.get(normName(name));
+      const existing = byName.get(normName(name));
       if (existing) {
         const idx = accounts.findIndex(a => a.id === existing.id);
-        accounts[idx] = {
-          ...accounts[idx],
-          name: patch.name,
-          accountId: patch.accountId !== undefined ? patch.accountId : accounts[idx].accountId,
-          currentCustomer: patch.currentCustomer !== undefined ? patch.currentCustomer : accounts[idx].currentCustomer,
-          mdPriority: patch.mdPriority !== undefined ? patch.mdPriority : accounts[idx].mdPriority,
-          strategic: patch.strategic !== undefined ? patch.strategic : accounts[idx].strategic,
-          cd: patch.cd !== undefined ? patch.cd : accounts[idx].cd,
-          rep: patch.rep !== undefined ? patch.rep : accounts[idx].rep,
-        };
+        accounts[idx] = { ...accounts[idx], ...patch };
       } else {
         accounts.push({
-          id: uid(), name: patch.name, accountId: patch.accountId || "",
-          currentCustomer: patch.currentCustomer || false, mdPriority: patch.mdPriority || false, strategic: patch.strategic || false,
-          cd: patch.cd || "", rep: patch.rep || "", notes: "", createdAt: todayStr(),
+          id: uid(), name, territory: "", tier: "", priority: "Moderate", status: "Active", cd: "", rep: "", notes: "",
+          mdPriority: false, strategic: false, metCustomer: false,
+          flagServiceNow: false, flagDynatrace: false, flagDtDedicatedProg: false, flagTaniumRevList: false,
+          flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false,
+          snRep: "", snStatus: "", snPriority: "", snContacts: "", snNotes: "",
+          dtRep: "", dtPsm: "", dtStatus: "", dtPriority: "", dtContacts: "", dtNotes: "",
+          taniumRep: "", taniumStatus: "", taniumPriority: "", taniumContacts: "", taniumNotes: "",
+          createdAt: todayStr(), ...patch,
         });
       }
     });
@@ -1276,7 +1458,7 @@ function AccountImportWizard({ data, onClose, onApply }) {
       {step === 1 && (
         <div>
           <p style={{ fontSize: 13, color: C.textSoft, marginBottom: 16 }}>
-            Export your account list from Excel as .csv or .xlsx, then upload it here. Nothing leaves this browser session.
+            Export your account list from Excel as .csv or .xlsx, then upload it here. If the sheet has title rows above the real header row (like the IO Account Tracker), the header row (the one with "Account") is detected automatically. Nothing leaves this browser session.
           </p>
           <div
             onClick={() => fileInputRef.current?.click()}
@@ -1314,7 +1496,7 @@ function AccountImportWizard({ data, onClose, onApply }) {
             </div>
           ))}
           <p style={{ fontSize: 11.5, color: C.textMute, marginTop: 4 }}>
-            Matching uses Account ID when available, otherwise account name. "Active opportunity" and "met with them" aren't imported — the command center tracks those automatically from your pipeline and activity log.
+            Matching uses account name, so re-importing the same tracker later updates existing accounts instead of duplicating them. "Active opportunity" and "met with them" aren't imported — the command center tracks those automatically from your pipeline and activity log.
           </p>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
             <button style={ghostBtn} onClick={() => setStep(1)}>Back</button>
@@ -1343,7 +1525,7 @@ function AccountImportWizard({ data, onClose, onApply }) {
             </div>
           )}
           <div style={{ fontSize: 11.5, color: C.textMute, marginBottom: 14 }}>
-            Manually-entered notes on existing accounts are never overwritten by an import.
+            Only the fields you mapped in step 2 get updated on matching accounts — anything left unmapped (like Notes, if you skip it) stays untouched.
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <button style={ghostBtn} onClick={() => setStep(2)}>Back</button>
@@ -1415,7 +1597,9 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
           else if (f.key === "dueDate") nextMap[f.key] = guessField(hdrs, ["due date", "duedate"]);
           else if (f.key === "status") nextMap[f.key] = guessField(hdrs, ["status"]);
           else if (f.key === "sseSme") nextMap[f.key] = guessField(hdrs, ["sse", "sme"]);
-          else if (f.key === "isOpp") nextMap[f.key] = guessField(hdrs, ["opp"]);
+          else if (f.key === "partnerContact") nextMap[f.key] = guessField(hdrs, ["partner contact", "partner"]);
+          else if (f.key === "isOpp") nextMap[f.key] = guessField(hdrs, ["opp"], ["deal reg"]);
+          else if (f.key === "dealReg") nextMap[f.key] = guessField(hdrs, ["deal reg"]);
           else if (f.key === "notes") nextMap[f.key] = guessField(hdrs, ["notes", "next steps"]);
         });
         setColMap(nextMap);
@@ -1493,7 +1677,9 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
         dueDate: colMap.dueDate ? normalizeDate(r[colMap.dueDate]) : "",
         status: colMap.status ? normStatus(r[colMap.status]) : "Not Started",
         sseSme: colMap.sseSme ? (r[colMap.sseSme] || "").toString().trim() : "",
+        partnerContact: colMap.partnerContact ? (r[colMap.partnerContact] || "").toString().trim() : "",
         isOpp: colMap.isOpp ? !!(r[colMap.isOpp] && r[colMap.isOpp].toString().trim()) : false,
+        dealReg: colMap.dealReg ? (r[colMap.dealReg] || "").toString().trim() : "",
         notes: colMap.notes ? (r[colMap.notes] || "").toString().trim() : "",
       };
 
@@ -1688,9 +1874,10 @@ const NAV = [
   { key: "pipeline", label: "Pipeline", icon: Layers },
   { key: "forecast", label: "Forecast", icon: TrendingUp },
   { key: "accounts", label: "Accounts", icon: Building2 },
+  { key: "gtro", label: "GTRO", icon: FileSpreadsheet },
+  { key: "tasks", label: "Tasks", icon: CheckSquare },
   { key: "goals", label: "Goals", icon: Target },
   { key: "prospecting", label: "Prospecting", icon: PhoneCall },
-  { key: "tasks", label: "Tasks", icon: CheckSquare },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -1716,12 +1903,20 @@ export default function SalesCommandCenter() {
   const [accountImportOpen, setAccountImportOpen] = useState(false);
   const [taskImportOpen, setTaskImportOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState("Active");
+  const [taskGroupBy, setTaskGroupBy] = useState("account");
   const [taskFieldFilters, setTaskFieldFilters] = useState({
-    priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", isOpp: "All", due: "All",
+    priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All",
   });
   const setTaskFieldFilter = (key, val) => setTaskFieldFilters(prev => ({ ...prev, [key]: val }));
-  const clearTaskFieldFilters = () => { setTaskFilter("Active"); setTaskFieldFilters({ priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", isOpp: "All", due: "All" }); };
+  const clearTaskFieldFilters = () => { setTaskFilter("Active"); setTaskFieldFilters({ priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All" }); };
   const [accountFilter, setAccountFilter] = useState("All");
+  const [accountGroupBy, setAccountGroupBy] = useState("none");
+  const [expandedAccounts, setExpandedAccounts] = useState(new Set());
+  const toggleAccountExpand = (id) => setExpandedAccounts(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const [pendingRestore, setPendingRestore] = useState(null);
   const [restoreError, setRestoreError] = useState("");
   const backupFileRef = useRef(null);
@@ -1925,6 +2120,212 @@ export default function SalesCommandCenter() {
     return <div style={{ color: C.textMute, padding: 40, textAlign: "center" }}>Loading command center…</div>;
   }
 
+  const chipFilteredAccounts = filteredAccounts
+    .filter(a => {
+      if (accountFilter === "All") return true;
+      const c = accountComputed(a);
+      if (accountFilter === "Active") return a.status === "Active";
+      if (accountFilter === "High priority") return a.priority === "High";
+      if (accountFilter === "ServiceNow") return !!a.flagServiceNow || !!a.snStatus;
+      if (accountFilter === "Dynatrace") return !!a.flagDynatrace || !!a.dtStatus;
+      if (accountFilter === "Tanium") return !!a.flagTaniumRevList || !!a.flagTaniumPtp || !!a.flagTaniumTarget || !!a.taniumStatus;
+      if (accountFilter === "Active opportunity") return c.hasActiveOpp;
+      if (accountFilter === "Never met") return !c.hasMet;
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const accountGroups = accountGroupBy === "none" ? null : (() => {
+    const map = new Map();
+    chipFilteredAccounts.forEach(a => {
+      const raw = (a[accountGroupBy] || "").toString().trim();
+      const key = raw ? normName(raw) : "unassigned";
+      const label = raw || `No ${ACCOUNT_GROUP_FIELD_LABEL[accountGroupBy].toLowerCase()}`;
+      if (!map.has(key)) map.set(key, { key, label, accounts: [] });
+      map.get(key).accounts.push(a);
+    });
+    const order = ACCOUNT_GROUP_ORDER[accountGroupBy];
+    return Array.from(map.values()).sort((x, y) => {
+      if (x.key === "unassigned") return 1;
+      if (y.key === "unassigned") return -1;
+      if (order) {
+        const xi = order.indexOf(x.label), yi = order.indexOf(y.label);
+        const xr = xi === -1 ? 999 : xi, yr = yi === -1 ? 999 : yi;
+        if (xr !== yr) return xr - yr;
+      }
+      return x.label.localeCompare(y.label);
+    });
+  })();
+
+  const accountTableHeader = (
+    <div style={{ display: "grid", gridTemplateColumns: "20px 1.3fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 1.6fr", padding: "10px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
+      <span></span><span>Account</span><span>Territory</span><span>Tier</span><span>Priority</span><span>Status</span><span>CD</span><span>Notes</span>
+    </div>
+  );
+
+  const renderAccountRow = (a) => {
+    const c = accountComputed(a);
+    const expanded = expandedAccounts.has(a.id);
+    const vendorPill = (status) => status
+      ? <Pill color={VENDOR_STATUS_COLOR[status] || C.textMute} bg={VENDOR_STATUS_BG[status] || "#F1F5F9"}>{status}</Pill>
+      : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>;
+    const yn = (v) => v
+      ? <Pill color={C.green} bg="#DCFCE7"><Check size={10} style={{ verticalAlign: -1 }} /></Pill>
+      : <Pill color={C.textMute} bg="#F1F5F9">—</Pill>;
+    const flagList = [
+      ["flagServiceNow", "ServiceNow"], ["flagDynatrace", "Dynatrace"], ["flagDtDedicatedProg", "DT - Dedicated Prog"],
+      ["flagTaniumRevList", "Tanium Rev List"], ["flagTaniumPtp", "Tanium PTP"], ["flagTaniumTarget", "Tanium Target"],
+      ["flagGrafana", "Grafana"], ["flagObservability", "Observability"],
+    ].filter(([key]) => a[key]);
+    return (
+      <div key={a.id}>
+        <div onClick={() => toggleAccountExpand(a.id)} style={{
+          display: "grid", gridTemplateColumns: "20px 1.3fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 1.6fr", padding: "12px 16px",
+          fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center"
+        }}>
+          <ChevronRight size={14} color={C.textMute} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s ease" }} />
+          <span style={{ color: C.text, fontWeight: 600 }}>{a.name}</span>
+          <span style={{ color: C.textSoft }}>{a.territory || "—"}</span>
+          <span style={{ color: C.textSoft }}>{a.tier || "—"}</span>
+          <span>{a.priority ? <Pill color={PRIORITY_COLOR[a.priority] || C.textMute} bg={PRIORITY_BG[a.priority] || "#F1F5F9"}>{a.priority}</Pill> : "—"}</span>
+          <span>{a.status ? <Pill color={a.status === "Active" ? C.green : C.textMute} bg={a.status === "Active" ? "#DCFCE7" : "#F1F5F9"}>{a.status}</Pill> : "—"}</span>
+          <span style={{ color: C.textSoft }}>{a.cd || "—"}</span>
+          <span style={{ color: C.textMute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.notes || "—"}</span>
+        </div>
+        {expanded && (
+          <div style={{ padding: "16px 16px 20px 46px", borderBottom: `1px solid ${C.border}`, background: "#FAFBFC" }}>
+            {(() => {
+              const acctTasks = data.tasks.filter(t => normName(t.account) === normName(a.name));
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3 }}>Tasks ({acctTasks.length})</div>
+                    <button style={{ ...ghostBtn, padding: "4px 9px", fontSize: 11.5 }} onClick={(e) => { e.stopPropagation(); setTaskModal({ account: a.name }); }}>
+                      <Plus size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Add task
+                    </button>
+                  </div>
+                  <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+                    {acctTasks.length === 0 ? (
+                      <div style={{ padding: "10px 12px", fontSize: 12.5, color: C.textMute, background: C.card }}>No tasks linked to this account yet.</div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <div style={{ minWidth: 1220 }}>
+                          <div style={{
+                            display: "grid", gridTemplateColumns: "1.5fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.6fr",
+                            padding: "8px 12px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4,
+                            borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
+                          }}>
+                            <span>Name</span><span>CD</span><span>Owner</span><span>SSE / SME</span><span>Partner Contact</span><span>Priority</span><span>Due date</span><span>Status</span><span>Opp</span><span>Deal Reg?</span><span>Notes / Next steps</span>
+                          </div>
+                          {acctTasks.map((t, i) => {
+                            const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
+                            return (
+                              <div key={t.id} style={{
+                                display: "grid", gridTemplateColumns: "1.5fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.6fr",
+                                padding: "10px 12px", borderBottom: i < acctTasks.length - 1 ? `1px solid ${C.border}` : "none",
+                                background: C.card, alignItems: "center", gap: 6
+                              }}>
+                                <span onClick={(e) => { e.stopPropagation(); setTaskModal(t); }} style={{
+                                  fontSize: 13, fontWeight: 500, cursor: "pointer",
+                                  color: t.status === "Done" ? C.textMute : C.text, textDecoration: t.status === "Done" ? "line-through" : "none"
+                                }}>{t.title}</span>
+                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.cd || "—"}</span>
+                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.rep || "—"}</span>
+                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.sseSme || "—"}</span>
+                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.partnerContact || "—"}</span>
+                                <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
+                                <span style={{ fontSize: 12.5, color: overdue ? C.red : C.textSoft, fontWeight: overdue ? 700 : 400 }}>{fmtDate(t.dueDate)}</span>
+                                <span>
+                                  <select
+                                    value={t.status}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => upsert("tasks", { ...t, status: e.target.value })}
+                                    style={{
+                                      fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer",
+                                      color: TASK_STATUS_COLOR[t.status], background: TASK_STATUS_BG[t.status]
+                                    }}
+                                  >
+                                    {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </span>
+                                <span>{t.isOpp ? <Pill color={C.blue} bg="#DBEAFE">Opp</Pill> : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>}</span>
+                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.dealReg || "—"}</span>
+                                <span style={{ fontSize: 12, color: C.textMute, whiteSpace: "normal", wordBreak: "break-word" }}>{t.notes || "—"}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {yn(c.hasActiveOpp)}<span style={{ fontSize: 11.5, color: C.textMute, marginRight: 10 }}>Active opportunity</span>
+                {yn(c.hasMet)}<span style={{ fontSize: 11.5, color: C.textMute }}>Met with them</span>
+              </div>
+              <button style={{ ...ghostBtn, padding: "5px 10px", fontSize: 11.5 }} onClick={(e) => { e.stopPropagation(); setAccModal(a); }}>
+                <Pencil size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Edit full details
+              </button>
+            </div>
+
+            {flagList.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 6 }}>Practice flags</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {flagList.map(([key, label]) => <Pill key={key} color={C.text} bg="#F1F5F9">{label}</Pill>)}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[
+                { label: "ServiceNow", color: "#16A34A", bg: "#F0FDF4", rep: a.snRep, status: a.snStatus, priority: a.snPriority, contacts: a.snContacts, notes: a.snNotes },
+                { label: "Dynatrace", color: "#3B82F6", bg: "#EFF6FF", rep: a.dtRep, psm: a.dtPsm, status: a.dtStatus, priority: a.dtPriority, contacts: a.dtContacts, notes: a.dtNotes },
+                { label: "Tanium", color: "#DC2626", bg: "#FEF2F2", rep: a.taniumRep, status: a.taniumStatus, priority: a.taniumPriority, contacts: a.taniumContacts, notes: a.taniumNotes },
+              ].map(v => (
+                <div key={v.label} style={{ background: v.bg, border: `1px solid ${v.color}33`, borderRadius: 8, padding: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: v.color, marginBottom: 10 }}>{v.label}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: v.psm !== undefined ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Rep</div>
+                      <div style={{ fontSize: 12.5, color: C.text }}>{v.rep || "—"}</div>
+                    </div>
+                    {v.psm !== undefined && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>PSM</div>
+                        <div style={{ fontSize: 12.5, color: C.text }}>{v.psm || "—"}</div>
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Status</div>
+                      <div>{vendorPill(v.status)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Priority</div>
+                      <div style={{ fontSize: 12.5, color: C.text }}>{v.priority || "—"}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Contacts</div>
+                    <div style={{ fontSize: 12.5, color: C.text, whiteSpace: "pre-wrap" }}>{v.contacts || "—"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Notes</div>
+                    <div style={{ fontSize: 12.5, color: C.text, whiteSpace: "pre-wrap" }}>{v.notes || "—"}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const stageGroups = STAGES
     .map(stage => {
       const opps = filteredOpps.filter(o => o.stage === stage && o.sfStatus !== "removed").sort((a, b) => (a.closeDate || "9999").localeCompare(b.closeDate || "9999"));
@@ -1983,6 +2384,8 @@ export default function SalesCommandCenter() {
   const taskAccountOpts = distinctTaskVals("account");
   const taskCdOpts = distinctTaskVals("cd");
   const taskSseOpts = distinctTaskVals("sseSme");
+  const taskPartnerOpts = distinctTaskVals("partnerContact");
+  const taskDealRegOpts = distinctTaskVals("dealReg");
 
   const scopedTasks = repScopedTasks
     .filter(t => taskFilter === "All" ? true : taskFilter === "Active" ? t.status !== "Done" : t.status === taskFilter)
@@ -1991,6 +2394,8 @@ export default function SalesCommandCenter() {
     .filter(t => taskFieldFilters.cd === "All" || (t.cd || "") === taskFieldFilters.cd)
     .filter(t => taskFieldFilters.owner === "All" || t.rep === taskFieldFilters.owner)
     .filter(t => taskFieldFilters.sseSme === "All" || (t.sseSme || "") === taskFieldFilters.sseSme)
+    .filter(t => taskFieldFilters.partnerContact === "All" || (t.partnerContact || "") === taskFieldFilters.partnerContact)
+    .filter(t => taskFieldFilters.dealReg === "All" || (t.dealReg || "") === taskFieldFilters.dealReg)
     .filter(t => taskFieldFilters.isOpp === "All" ? true : taskFieldFilters.isOpp === "Yes" ? !!t.isOpp : !t.isOpp)
     .filter(t => {
       if (taskFieldFilters.due === "All") return true;
@@ -2027,7 +2432,57 @@ export default function SalesCommandCenter() {
       if (bd) return 1;
       return a.title.localeCompare(b.title);
     });
-  const taskGroups = unassignedTaskGroup ? [unassignedTaskGroup, ...acctTaskGroups] : acctTaskGroups;
+  const groupedByAccount = unassignedTaskGroup ? [unassignedTaskGroup, ...acctTaskGroups] : acctTaskGroups;
+
+  const groupedByPriority = ["Critical", "High", "Moderate", "Low"]
+    .map(p => {
+      const tasks = scopedTasks
+        .filter(t => (t.priority || "Moderate") === p)
+        .slice()
+        .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999") || (a.account || "").localeCompare(b.account || ""));
+      const acctCount = new Set(tasks.map(t => normName(t.account || "unassigned"))).size;
+      return {
+        key: p, title: p, subtitle: `${acctCount} account${acctCount === 1 ? "" : "s"}`,
+        tasks, color: PRIORITY_COLOR[p],
+      };
+    })
+    .filter(g => g.tasks.length > 0);
+
+  const noCdTaskGroup = (() => {
+    const list = byPriority(scopedTasks.filter(t => !t.cd || !t.cd.trim()));
+    return list.length > 0 ? { key: "no-cd", title: "No CD assigned", subtitle: "", tasks: list } : null;
+  })();
+  const cdTaskMap = new Map();
+  scopedTasks.filter(t => t.cd && t.cd.trim()).forEach(t => {
+    const key = normName(t.cd);
+    if (!cdTaskMap.has(key)) {
+      const acctSet = new Set();
+      cdTaskMap.set(key, { key, title: t.cd.trim(), acctSet, tasks: [] });
+    }
+    cdTaskMap.get(key).acctSet.add(normName(t.account || ""));
+    cdTaskMap.get(key).tasks.push(t);
+  });
+  const cdTaskGroups = Array.from(cdTaskMap.values())
+    .map(g => {
+      const acctCount = Array.from(g.acctSet).filter(Boolean).length;
+      return { key: g.key, title: g.title, subtitle: `${acctCount} account${acctCount === 1 ? "" : "s"}`, tasks: byPriority(g.tasks) };
+    })
+    .sort((a, b) => {
+      const ap = PRIORITY_RANK[a.tasks[0]?.priority] ?? 4;
+      const bp = PRIORITY_RANK[b.tasks[0]?.priority] ?? 4;
+      if (ap !== bp) return ap - bp;
+      const ad = earliestDue(a.tasks), bd = earliestDue(b.tasks);
+      if (ad && bd) return ad.localeCompare(bd);
+      if (ad) return -1;
+      if (bd) return 1;
+      return a.title.localeCompare(b.title);
+    });
+  const groupedByCd = noCdTaskGroup ? [noCdTaskGroup, ...cdTaskGroups] : cdTaskGroups;
+
+  const groupedByNone = byPriority(scopedTasks).length > 0 ? [{ key: "all", title: "All tasks", subtitle: "", tasks: byPriority(scopedTasks) }] : [];
+
+  const taskGroups = taskGroupBy === "priority" ? groupedByPriority : taskGroupBy === "cd" ? groupedByCd : taskGroupBy === "none" ? groupedByNone : groupedByAccount;
+
 
   return (
     <div style={{
@@ -2457,13 +2912,14 @@ export default function SalesCommandCenter() {
 
           {tab === "accounts" && (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 16 }}>
                 {[
                   { label: "Total accounts", value: filteredAccounts.length, color: C.text },
-                  { label: "Current customers", value: filteredAccounts.filter(a => a.currentCustomer).length, color: C.blue },
-                  { label: "Ahead strategic", value: filteredAccounts.filter(a => a.strategic).length, color: C.purple },
-                  { label: "MD priority", value: filteredAccounts.filter(a => a.mdPriority).length, color: C.amber },
-                  { label: "Active opportunity", value: filteredAccounts.filter(a => accountComputed(a).hasActiveOpp).length, color: C.green },
+                  { label: "Active", value: filteredAccounts.filter(a => a.status === "Active").length, color: C.green },
+                  { label: "High priority", value: filteredAccounts.filter(a => a.priority === "High").length, color: C.red },
+                  { label: "ServiceNow customers", value: filteredAccounts.filter(a => a.snStatus === "Customer").length, color: C.blue },
+                  { label: "Dynatrace customers", value: filteredAccounts.filter(a => a.dtStatus === "Customer").length, color: C.purple },
+                  { label: "Tanium customers", value: filteredAccounts.filter(a => a.taniumStatus === "Customer").length, color: C.amber },
                 ].map(s => (
                   <Card key={s.label} style={{ padding: "12px 14px" }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>{s.label}</div>
@@ -2472,9 +2928,9 @@ export default function SalesCommandCenter() {
                 ))}
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {["All", "Active opportunity", "Current customer", "Strategic", "MD priority", "Never met"].map(s => (
+                  {["All", "Active", "High priority", "ServiceNow", "Dynatrace", "Tanium", "Active opportunity", "Never met"].map(s => (
                     <div key={s} onClick={() => setAccountFilter(s)} style={{
                       fontSize: 12, padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 600,
                       background: accountFilter === s ? C.sidebarActiveBg : C.card,
@@ -2488,44 +2944,107 @@ export default function SalesCommandCenter() {
                 </div>
               </div>
 
-              <Card style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 1fr 1fr", padding: "10px 16px", fontSize: 11, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
-                  <span>Account</span><span>CD</span><span>Active opp</span><span>Customer</span><span>Met</span><span>MD priority</span><span>Strategic</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute }}>Group by</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["none", "None"], ["cd", "CD"], ["status", "Status"], ["territory", "Territory"], ["priority", "Priority"], ["tier", "Tier"]].map(([val, label]) => (
+                    <div key={val} onClick={() => setAccountGroupBy(val)} style={{
+                      fontSize: 12, padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 600,
+                      background: accountGroupBy === val ? C.sidebarActiveBg : C.card,
+                      color: accountGroupBy === val ? C.sidebarActiveText : C.textSoft, border: `1px solid ${accountGroupBy === val ? "#C7D2FE" : C.border}`
+                    }}>{label}</div>
+                  ))}
                 </div>
-                {filteredAccounts
-                  .filter(a => {
-                    if (accountFilter === "All") return true;
-                    const c = accountComputed(a);
-                    if (accountFilter === "Active opportunity") return c.hasActiveOpp;
-                    if (accountFilter === "Current customer") return a.currentCustomer;
-                    if (accountFilter === "Strategic") return a.strategic;
-                    if (accountFilter === "MD priority") return a.mdPriority;
-                    if (accountFilter === "Never met") return !c.hasMet;
-                    return true;
-                  })
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(a => {
-                    const c = accountComputed(a);
-                    const yn = (v) => v
-                      ? <Pill color={C.green} bg="#DCFCE7"><Check size={10} style={{ verticalAlign: -1 }} /></Pill>
-                      : <Pill color={C.textMute} bg="#F1F5F9">—</Pill>;
-                    return (
-                      <div key={a.id} onClick={() => setAccModal(a)} style={{
-                        display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1fr 1fr 1fr 1fr", padding: "12px 16px",
-                        fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center"
-                      }}>
-                        <span style={{ color: C.text, fontWeight: 600 }}>{a.name}</span>
-                        <span style={{ color: C.textSoft }}>{a.cd || "—"}</span>
-                        <span>{yn(c.hasActiveOpp)}</span>
-                        <span>{yn(a.currentCustomer)}</span>
-                        <span>{yn(c.hasMet)}</span>
-                        <span>{yn(a.mdPriority)}</span>
-                        <span>{yn(a.strategic)}</span>
+              </div>
+
+              {accountGroupBy === "none" ? (
+                <Card style={{ padding: 0, overflow: "hidden" }}>
+                  {accountTableHeader}
+                  {chipFilteredAccounts.map(a => renderAccountRow(a))}
+                  {chipFilteredAccounts.length === 0 && (
+                    <div style={{ padding: 30, textAlign: "center", color: C.textMute, fontSize: 13 }}>No accounts yet. Import your account list or add one manually.</div>
+                  )}
+                </Card>
+              ) : (
+                <>
+                  {accountGroups.map(g => (
+                    <div key={g.key} style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text }}>{g.label}</h4>
+                        <span style={{ fontSize: 11.5, color: C.textMute }}>{g.accounts.length} account{g.accounts.length === 1 ? "" : "s"}</span>
                       </div>
-                    );
-                  })}
+                      <Card style={{ padding: 0, overflow: "hidden" }}>
+                        {accountTableHeader}
+                        {g.accounts.map(a => renderAccountRow(a))}
+                      </Card>
+                    </div>
+                  ))}
+                  {accountGroups.length === 0 && (
+                    <Card style={{ padding: 30, textAlign: "center", color: C.textMute, fontSize: 13 }}>No accounts yet. Import your account list or add one manually.</Card>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === "gtro" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>GTRO</h4>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textMute }}>Every account, spreadsheet-style. Click MD Priority, Ahead Strategic, or Met the Customer to toggle. CD stays in sync with the Accounts tab.</p>
+                </div>
+              </div>
+              <Card style={{ padding: 0, overflow: "hidden" }}>
+                <div style={{
+                  display: "grid", gridTemplateColumns: "1.8fr 1fr 1fr 1fr 1fr 1fr",
+                  fontSize: 11, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 700
+                }}>
+                  {["Account", "MD Priority", "Ahead Strategic", "CD", "Met the Customer", "Active IO Opp"].map((h, i) => (
+                    <div key={h} style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, borderRight: i < 5 ? `1px solid ${C.border}` : "none", background: "#F8FAFC" }}>{h}</div>
+                  ))}
+                </div>
+                {filteredAccounts.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a, idx) => {
+                  const met = !!a.metCustomer;
+                  const activeOpp = a.status === "Active";
+                  const cellBase = { padding: "10px 14px", fontSize: 12.5, borderRight: `1px solid ${C.border}`, display: "flex", alignItems: "center" };
+                  const rowBg = idx % 2 === 1 ? "#FAFBFC" : C.card;
+                  const REDWINGS_RED = "#CE1126";
+                  return (
+                    <div key={a.id} style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 1fr 1fr 1fr 1fr", background: rowBg }}>
+                      <div style={{ ...cellBase, fontWeight: 600, color: C.text, borderBottom: `1px solid ${C.border}` }}>{a.name}</div>
+                      <div
+                        onClick={() => upsert("accounts", { ...a, mdPriority: !a.mdPriority })}
+                        style={{ ...cellBase, borderBottom: `1px solid ${C.border}`, cursor: "pointer", color: C.text }}
+                      >
+                        {a.mdPriority ? "Yes" : ""}
+                      </div>
+                      <div
+                        onClick={() => upsert("accounts", { ...a, strategic: !a.strategic })}
+                        style={{ ...cellBase, borderBottom: `1px solid ${C.border}`, cursor: "pointer", color: C.text }}
+                      >
+                        {a.strategic ? "Yes" : ""}
+                      </div>
+                      <div style={{ ...cellBase, color: C.textSoft, borderBottom: `1px solid ${C.border}` }}>{a.cd || "—"}</div>
+                      <div
+                        onClick={() => upsert("accounts", { ...a, metCustomer: !a.metCustomer })}
+                        style={{
+                          ...cellBase, borderBottom: `1px solid ${C.border}`, cursor: "pointer",
+                          background: met ? rowBg : REDWINGS_RED, color: met ? C.text : "#FFFFFF", fontWeight: met ? 400 : 700
+                        }}>
+                        {met ? "Yes" : "No"}
+                      </div>
+                      <div style={{
+                        padding: "10px 14px", fontSize: 12.5, display: "flex", alignItems: "center", borderBottom: `1px solid ${C.border}`,
+                        background: activeOpp ? rowBg : REDWINGS_RED, color: activeOpp ? C.green : "#FFFFFF", fontWeight: 700
+                      }}>
+                        {activeOpp ? "Active" : ""}
+                      </div>
+                    </div>
+                  );
+                })}
                 {filteredAccounts.length === 0 && (
-                  <div style={{ padding: 30, textAlign: "center", color: C.textMute, fontSize: 13 }}>No accounts yet. Import your account list or add one manually.</div>
+                  <div style={{ padding: 30, textAlign: "center", color: C.textMute, fontSize: 13 }}>No accounts yet — add some in the Accounts tab first.</div>
                 )}
               </Card>
             </div>
@@ -2592,7 +3111,19 @@ export default function SalesCommandCenter() {
 
           {tab === "tasks" && (
             <div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute }}>Group by</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[["none", "None"], ["account", "Account"], ["priority", "Priority"], ["cd", "CD"]].map(([val, label]) => (
+                      <div key={val} onClick={() => setTaskGroupBy(val)} style={{
+                        fontSize: 12, padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 600,
+                        background: taskGroupBy === val ? C.sidebarActiveBg : C.card,
+                        color: taskGroupBy === val ? C.sidebarActiveText : C.textSoft, border: `1px solid ${taskGroupBy === val ? "#C7D2FE" : C.border}`
+                      }}>{label}</div>
+                    ))}
+                  </div>
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={ghostBtn} onClick={() => setTaskImportOpen(true)}><UploadCloud size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Import from Excel</button>
                   <button style={primaryBtn} onClick={() => setTaskModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />Add task</button>
@@ -2612,7 +3143,9 @@ export default function SalesCommandCenter() {
                     { key: "cd", label: "CD", options: ["All", ...taskCdOpts] },
                     { key: "owner", label: "Owner", options: ["All", ...reps] },
                     { key: "sseSme", label: "SSE / SME", options: ["All", ...taskSseOpts] },
+                    { key: "partnerContact", label: "Partner Contact", options: ["All", ...taskPartnerOpts] },
                     { key: "isOpp", label: "Opp", options: ["All", "Yes", "No"] },
+                    { key: "dealReg", label: "Deal Reg?", options: ["All", ...taskDealRegOpts] },
                     { key: "due", label: "Due date", options: ["All", "Overdue", "Next 7 days", "Next 30 days", "No due date"] },
                   ].map(f => (
                     <div key={f.key}>
@@ -2633,42 +3166,50 @@ export default function SalesCommandCenter() {
                 const topPriorityColor = g.tasks[0] ? (PRIORITY_COLOR[g.tasks[0].priority] || C.textMute) : C.textMute;
                 return (
                   <Card key={g.key} style={{ padding: 0, overflow: "hidden", marginBottom: 12 }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 10, padding: "13px 16px",
-                      borderLeft: `3px solid ${topPriorityColor}`
-                    }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
-                          {g.key === "unassigned" ? <AlertCircle size={13} color={C.textMute} /> : <Building2 size={13} color={C.textMute} />}
-                          {g.title}
+                    {taskGroupBy !== "none" && (
+                      <div style={{
+                        display: "flex", alignItems: "center", gap: 10, padding: "13px 16px",
+                        borderLeft: `3px solid ${topPriorityColor}`
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
+                            {taskGroupBy === "account"
+                              ? (g.key === "unassigned" ? <AlertCircle size={13} color={C.textMute} /> : <Building2 size={13} color={C.textMute} />)
+                              : taskGroupBy === "cd"
+                              ? (g.key === "no-cd" ? <AlertCircle size={13} color={C.textMute} /> : <span style={{ width: 9, height: 9, borderRadius: 2, background: topPriorityColor, display: "inline-block" }} />)
+                              : <span style={{ width: 9, height: 9, borderRadius: 2, background: g.color || topPriorityColor, display: "inline-block" }} />}
+                            {g.title}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 1 }}>{g.subtitle}</div>
                         </div>
-                        <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 1 }}>{g.subtitle}</div>
+                        <span style={{ fontSize: 11.5, color: C.textMute, fontWeight: 600 }}>{g.tasks.length} {g.tasks.length === 1 ? "task" : "tasks"}</span>
                       </div>
-                      <span style={{ fontSize: 11.5, color: C.textMute, fontWeight: 600 }}>{g.tasks.length} {g.tasks.length === 1 ? "task" : "tasks"}</span>
-                    </div>
-                    <div style={{ borderTop: `1px solid ${C.border}`, overflowX: "auto" }}>
-                      <div style={{ minWidth: 980 }}>
+                    )}
+                    <div style={{ borderTop: taskGroupBy !== "none" ? `1px solid ${C.border}` : "none", overflowX: "auto" }}>
+                      <div style={{ minWidth: 1320 }}>
                         <div style={{
-                          display: "grid", gridTemplateColumns: "1.6fr 0.8fr 0.8fr 0.9fr 0.8fr 0.8fr 1fr 0.6fr 1.8fr",
+                          display: "grid", gridTemplateColumns: "1.4fr 1.1fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.5fr",
                           padding: "8px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4,
                           borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
                         }}>
-                          <span>Name</span><span>CD</span><span>Owner</span><span>SSE / SME</span><span>Priority</span><span>Due date</span><span>Status</span><span>Opp</span><span>Notes / Next steps</span>
+                          <span>Name</span><span>Account</span><span>CD</span><span>Owner</span><span>SSE / SME</span><span>Partner Contact</span><span>Priority</span><span>Due date</span><span>Status</span><span>Opp</span><span>Deal Reg?</span><span>Notes / Next steps</span>
                         </div>
                         {g.tasks.map(t => {
                           const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
                           return (
                             <div key={t.id} style={{
-                              display: "grid", gridTemplateColumns: "1.6fr 0.8fr 0.8fr 0.9fr 0.8fr 0.8fr 1fr 0.6fr 1.8fr",
+                              display: "grid", gridTemplateColumns: "1.4fr 1.1fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.5fr",
                               padding: "11px 16px", borderBottom: `1px solid ${C.border}`, background: "#FAFBFC", alignItems: "center", gap: 6
                             }}>
                               <span onClick={() => setTaskModal(t)} style={{
                                 fontSize: 13, fontWeight: 500, cursor: "pointer",
                                 color: t.status === "Done" ? C.textMute : C.text, textDecoration: t.status === "Done" ? "line-through" : "none"
                               }}>{t.title}</span>
+                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.account || "—"}</span>
                               <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.cd || "—"}</span>
                               <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.rep || "—"}</span>
                               <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.sseSme || "—"}</span>
+                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.partnerContact || "—"}</span>
                               <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
                               <span style={{ fontSize: 12.5, color: overdue ? C.red : C.textSoft, fontWeight: overdue ? 700 : 400 }}>{fmtDate(t.dueDate)}</span>
                               <span>
@@ -2684,6 +3225,7 @@ export default function SalesCommandCenter() {
                                 </select>
                               </span>
                               <span>{t.isOpp ? <Pill color={C.blue} bg="#DBEAFE">Opp</Pill> : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>}</span>
+                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.dealReg || "—"}</span>
                               <span style={{ fontSize: 12, color: C.textMute, whiteSpace: "normal", wordBreak: "break-word" }}>{t.notes || "—"}</span>
                             </div>
                           );
@@ -2894,7 +3436,7 @@ export default function SalesCommandCenter() {
         />
       )}
       {accModal && (
-        <Modal title={accModal.id ? "Edit account" : "New account"} onClose={() => setAccModal(null)}>
+        <Modal title={accModal.id ? "Edit account" : "New account"} wide onClose={() => setAccModal(null)}>
           <AccountForm
             initial={accModal.id ? accModal : null}
             reps={reps}
