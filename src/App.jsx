@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import {
   LayoutDashboard, Target, PhoneCall, CheckSquare, Layers, Settings as SettingsIcon,
   Plus, X, Trash2, TrendingUp, AlertCircle, DollarSign, UploadCloud, Check,
-  ArrowRight, RefreshCw, FileSpreadsheet, CheckCircle2, ArrowUpRight, ArrowDownRight, Minus, Building2, ChevronRight, Pencil
+  ArrowRight, RefreshCw, FileSpreadsheet, CheckCircle2, ArrowUpRight, ArrowDownRight, Minus, Building2, ChevronRight, Pencil, Search
 } from "lucide-react";
 
 const STORAGE_KEY = "scc-data-v1";
@@ -1904,15 +1904,22 @@ export default function SalesCommandCenter() {
   const [taskImportOpen, setTaskImportOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState("Active");
   const [taskGroupBy, setTaskGroupBy] = useState("account");
+  const [taskSearch, setTaskSearch] = useState("");
   const [taskFieldFilters, setTaskFieldFilters] = useState({
     priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All",
   });
   const setTaskFieldFilter = (key, val) => setTaskFieldFilters(prev => ({ ...prev, [key]: val }));
-  const clearTaskFieldFilters = () => { setTaskFilter("Active"); setTaskFieldFilters({ priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All" }); };
+  const clearTaskFieldFilters = () => { setTaskFilter("Active"); setTaskSearch(""); setTaskFieldFilters({ priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All" }); };
   const [accountFilter, setAccountFilter] = useState("All");
   const [accountGroupBy, setAccountGroupBy] = useState("none");
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const toggleAccountExpand = (id) => setExpandedAccounts(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const [expandedTasks, setExpandedTasks] = useState(new Set());
+  const toggleTaskExpand = (id) => setExpandedTasks(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
@@ -2209,51 +2216,9 @@ export default function SalesCommandCenter() {
                       <div style={{ padding: "10px 12px", fontSize: 12.5, color: C.textMute, background: C.card }}>No tasks linked to this account yet.</div>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
-                        <div style={{ minWidth: 1220 }}>
-                          <div style={{
-                            display: "grid", gridTemplateColumns: "1.5fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.6fr",
-                            padding: "8px 12px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4,
-                            borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
-                          }}>
-                            <span>Name</span><span>CD</span><span>Owner</span><span>SSE / SME</span><span>Partner Contact</span><span>Priority</span><span>Due date</span><span>Status</span><span>Opp</span><span>Deal Reg?</span><span>Notes / Next steps</span>
-                          </div>
-                          {acctTasks.map((t, i) => {
-                            const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
-                            return (
-                              <div key={t.id} style={{
-                                display: "grid", gridTemplateColumns: "1.5fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.6fr",
-                                padding: "10px 12px", borderBottom: i < acctTasks.length - 1 ? `1px solid ${C.border}` : "none",
-                                background: C.card, alignItems: "center", gap: 6
-                              }}>
-                                <span onClick={(e) => { e.stopPropagation(); setTaskModal(t); }} style={{
-                                  fontSize: 13, fontWeight: 500, cursor: "pointer",
-                                  color: t.status === "Done" ? C.textMute : C.text, textDecoration: t.status === "Done" ? "line-through" : "none"
-                                }}>{t.title}</span>
-                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.cd || "—"}</span>
-                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.rep || "—"}</span>
-                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.sseSme || "—"}</span>
-                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.partnerContact || "—"}</span>
-                                <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
-                                <span style={{ fontSize: 12.5, color: overdue ? C.red : C.textSoft, fontWeight: overdue ? 700 : 400 }}>{fmtDate(t.dueDate)}</span>
-                                <span>
-                                  <select
-                                    value={t.status}
-                                    onClick={e => e.stopPropagation()}
-                                    onChange={e => upsert("tasks", { ...t, status: e.target.value })}
-                                    style={{
-                                      fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer",
-                                      color: TASK_STATUS_COLOR[t.status], background: TASK_STATUS_BG[t.status]
-                                    }}
-                                  >
-                                    {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                  </select>
-                                </span>
-                                <span>{t.isOpp ? <Pill color={C.blue} bg="#DBEAFE">Opp</Pill> : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>}</span>
-                                <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.dealReg || "—"}</span>
-                                <span style={{ fontSize: 12, color: C.textMute, whiteSpace: "normal", wordBreak: "break-word" }}>{t.notes || "—"}</span>
-                              </div>
-                            );
-                          })}
+                        <div style={{ minWidth: 980 }}>
+                          {taskTableHeader}
+                          {acctTasks.map(t => renderTaskRow(t))}
                         </div>
                       </div>
                     )}
@@ -2319,6 +2284,84 @@ export default function SalesCommandCenter() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const taskTableHeader = (
+    <div style={{
+      display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr 1.6fr",
+      padding: "8px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4,
+      borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
+    }}>
+      <span></span><span>Name</span><span>Account</span><span>CD</span><span>Owner</span><span>Priority</span><span>Due date</span><span>Status</span><span>Notes</span>
+    </div>
+  );
+
+  const renderTaskRow = (t) => {
+    const expanded = expandedTasks.has(t.id);
+    const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
+    return (
+      <div key={t.id}>
+        <div onClick={() => toggleTaskExpand(t.id)} style={{
+          display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr 1.6fr",
+          padding: "11px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center", gap: 6, background: "#FAFBFC"
+        }}>
+          <ChevronRight size={14} color={C.textMute} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s ease" }} />
+          <span style={{
+            fontSize: 13, fontWeight: 500, color: t.status === "Done" ? C.textMute : C.text,
+            textDecoration: t.status === "Done" ? "line-through" : "none"
+          }}>{t.title}</span>
+          <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.account || "—"}</span>
+          <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.cd || "—"}</span>
+          <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.rep || "—"}</span>
+          <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
+          <span style={{ fontSize: 12.5, color: overdue ? C.red : C.textSoft, fontWeight: overdue ? 700 : 400 }}>{fmtDate(t.dueDate)}</span>
+          <span onClick={e => e.stopPropagation()}>
+            <select
+              value={t.status}
+              onChange={e => upsert("tasks", { ...t, status: e.target.value })}
+              style={{
+                fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer",
+                color: TASK_STATUS_COLOR[t.status], background: TASK_STATUS_BG[t.status]
+              }}
+            >
+              {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </span>
+          <span style={{ fontSize: 12, color: C.textMute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.notes || "—"}</span>
+        </div>
+        {expanded && (
+          <div style={{ padding: "14px 16px 16px 40px", borderBottom: `1px solid ${C.border}`, background: "#FAFBFC" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, flex: 1 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>SSE / SME</div>
+                  <div style={{ fontSize: 12.5, color: C.text }}>{t.sseSme || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Partner Contact</div>
+                  <div style={{ fontSize: 12.5, color: C.text }}>{t.partnerContact || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Opp</div>
+                  <div>{t.isOpp ? <Pill color={C.blue} bg="#DBEAFE">Opp</Pill> : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Deal Reg?</div>
+                  <div style={{ fontSize: 12.5, color: C.text }}>{t.dealReg || "—"}</div>
+                </div>
+              </div>
+              <button style={{ ...ghostBtn, padding: "5px 10px", fontSize: 11.5, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setTaskModal(t); }}>
+                <Pencil size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Edit full details
+              </button>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Notes / Next steps</div>
+              <div style={{ fontSize: 12.5, color: C.text, whiteSpace: "pre-wrap" }}>{t.notes || "—"}</div>
             </div>
           </div>
         )}
@@ -2406,6 +2449,11 @@ export default function SalesCommandCenter() {
       if (taskFieldFilters.due === "Next 7 days") return d >= 0 && d <= 7;
       if (taskFieldFilters.due === "Next 30 days") return d >= 0 && d <= 30;
       return true;
+    })
+    .filter(t => {
+      if (!taskSearch.trim()) return true;
+      const q = taskSearch.trim().toLowerCase();
+      return (t.title || "").toLowerCase().includes(q) || (t.account || "").toLowerCase().includes(q);
     });
   const unassignedTaskGroup = (() => {
     const list = byPriority(scopedTasks.filter(t => !t.account || !t.account.trim()));
@@ -3130,6 +3178,24 @@ export default function SalesCommandCenter() {
                 </div>
               </div>
 
+              <div style={{ position: "relative", marginBottom: 16, maxWidth: 340 }}>
+                <Search size={14} color={C.textMute} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)" }} />
+                <input
+                  value={taskSearch}
+                  onChange={e => setTaskSearch(e.target.value)}
+                  placeholder="Search by task name or account…"
+                  style={{ ...inputStyle, marginBottom: 0, paddingLeft: 32 }}
+                />
+                {taskSearch && (
+                  <button onClick={() => setTaskSearch("")} style={{
+                    position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", cursor: "pointer", color: C.textMute, padding: 2
+                  }}>
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
               <Card style={{ padding: "14px 16px", marginBottom: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute }}>Filter by field</span>
@@ -3186,50 +3252,9 @@ export default function SalesCommandCenter() {
                       </div>
                     )}
                     <div style={{ borderTop: taskGroupBy !== "none" ? `1px solid ${C.border}` : "none", overflowX: "auto" }}>
-                      <div style={{ minWidth: 1320 }}>
-                        <div style={{
-                          display: "grid", gridTemplateColumns: "1.4fr 1.1fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.5fr",
-                          padding: "8px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4,
-                          borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
-                        }}>
-                          <span>Name</span><span>Account</span><span>CD</span><span>Owner</span><span>SSE / SME</span><span>Partner Contact</span><span>Priority</span><span>Due date</span><span>Status</span><span>Opp</span><span>Deal Reg?</span><span>Notes / Next steps</span>
-                        </div>
-                        {g.tasks.map(t => {
-                          const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
-                          return (
-                            <div key={t.id} style={{
-                              display: "grid", gridTemplateColumns: "1.4fr 1.1fr 0.7fr 0.7fr 0.8fr 0.9fr 0.7fr 0.8fr 1fr 0.6fr 0.7fr 1.5fr",
-                              padding: "11px 16px", borderBottom: `1px solid ${C.border}`, background: "#FAFBFC", alignItems: "center", gap: 6
-                            }}>
-                              <span onClick={() => setTaskModal(t)} style={{
-                                fontSize: 13, fontWeight: 500, cursor: "pointer",
-                                color: t.status === "Done" ? C.textMute : C.text, textDecoration: t.status === "Done" ? "line-through" : "none"
-                              }}>{t.title}</span>
-                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.account || "—"}</span>
-                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.cd || "—"}</span>
-                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.rep || "—"}</span>
-                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.sseSme || "—"}</span>
-                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.partnerContact || "—"}</span>
-                              <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
-                              <span style={{ fontSize: 12.5, color: overdue ? C.red : C.textSoft, fontWeight: overdue ? 700 : 400 }}>{fmtDate(t.dueDate)}</span>
-                              <span>
-                                <select
-                                  value={t.status}
-                                  onChange={e => upsert("tasks", { ...t, status: e.target.value })}
-                                  style={{
-                                    fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer",
-                                    color: TASK_STATUS_COLOR[t.status], background: TASK_STATUS_BG[t.status]
-                                  }}
-                                >
-                                  {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                              </span>
-                              <span>{t.isOpp ? <Pill color={C.blue} bg="#DBEAFE">Opp</Pill> : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>}</span>
-                              <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.dealReg || "—"}</span>
-                              <span style={{ fontSize: 12, color: C.textMute, whiteSpace: "normal", wordBreak: "break-word" }}>{t.notes || "—"}</span>
-                            </div>
-                          );
-                        })}
+                      <div style={{ minWidth: 980 }}>
+                        {taskTableHeader}
+                        {g.tasks.map(t => renderTaskRow(t))}
                       </div>
                     </div>
                   </Card>
@@ -3468,3 +3493,4 @@ export default function SalesCommandCenter() {
     </div>
   );
 }
+
