@@ -1927,6 +1927,7 @@ export default function SalesCommandCenter() {
   const [pendingRestore, setPendingRestore] = useState(null);
   const [restoreError, setRestoreError] = useState("");
   const backupFileRef = useRef(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => { setPeriod(currentQuarter()); }, [loaded]);
 
@@ -2017,6 +2018,11 @@ export default function SalesCommandCenter() {
     if (!pendingRestore) return;
     setData(mergeLoadedData(pendingRestore));
     setPendingRestore(null);
+  };
+
+  const performReset = () => {
+    setData(JSON.parse(JSON.stringify(DEFAULT_DATA)));
+    setResetConfirmOpen(false);
   };
 
   const activeOpps = filteredOpps.filter(o => o.sfStatus !== "removed");
@@ -3382,6 +3388,14 @@ export default function SalesCommandCenter() {
                 </div>
               )}
 
+              <h4 style={{ fontSize: 14, fontWeight: 700, color: C.red, marginBottom: 4, marginTop: 22 }}>Danger zone</h4>
+              <p style={{ fontSize: 12.5, color: C.textSoft, marginBottom: 12 }}>
+                Permanently erase every opportunity, task, account, goal, region, and team, and return this command center to a blank slate. This affects everyone who uses this shared link.
+              </p>
+              <button style={{ ...ghostBtn, ...dangerText, borderColor: "#FECACA" }} onClick={() => setResetConfirmOpen(true)}>
+                <Trash2 size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Reset data
+              </button>
+
               <h4 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4, marginTop: 10 }}>Salesforce sync</h4>
               {data.importConfig.lastImportDate ? (
                 <p style={{ fontSize: 12.5, color: C.textSoft, marginBottom: 14 }}>
@@ -3489,6 +3503,26 @@ export default function SalesCommandCenter() {
           onClose={() => setTaskImportOpen(false)}
           onApply={(next) => { setData(next); setTaskImportOpen(false); }}
         />
+      )}
+      {resetConfirmOpen && (
+        <Modal title="Reset all data?" onClose={() => setResetConfirmOpen(false)}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16, background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: 14 }}>
+            <AlertCircle size={18} color={C.red} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13, color: "#7F1D1D" }}>
+              This permanently deletes every opportunity, task, account, goal, region, and team in this command center and returns it to a blank slate.
+              This cannot be undone, and it affects everyone who uses this shared link — not just you.
+            </div>
+          </div>
+          <p style={{ fontSize: 12.5, color: C.textSoft, marginBottom: 16 }}>
+            If you haven't already, consider downloading a backup first (Settings → Backup & restore) so you have something to restore from if this was a mistake.
+          </p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button style={ghostBtn} onClick={() => setResetConfirmOpen(false)}>Cancel</button>
+            <button style={{ ...primaryBtn, background: C.red }} onClick={performReset}>
+              <Trash2 size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Yes, reset everything
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );
