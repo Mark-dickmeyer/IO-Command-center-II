@@ -9,10 +9,11 @@ import {
 
 const STORAGE_KEY = "scc-data-v1";
 
-const STAGES = ["Prospecting", "Pipeline", "Upside", "Strong Upside", "Commit", "Closed Won", "Closed Lost"];
+const STAGES = ["Prospecting", "Forecasting", "Pipeline", "Upside", "Strong Upside", "Commit", "Closed Won", "Closed Lost"];
 const OPEN_STAGES = STAGES.filter(s => s !== "Closed Won" && s !== "Closed Lost");
 const STAGE_COLOR = {
   "Prospecting": "#94A3B8",
+  "Forecasting": "#8B5CF6",
   "Pipeline": "#3B82F6",
   "Upside": "#F59E0B",
   "Strong Upside": "#EA580C",
@@ -33,10 +34,11 @@ const PRIORITY_RANK = { Critical: 0, High: 1, Moderate: 2, Low: 3 };
 const PRIORITY_COLOR = { Critical: "#B91C1C", High: "#EA580C", Moderate: "#D97706", Low: "#64748B" };
 const PRIORITY_BG = { Critical: "#FEE2E2", High: "#FFEDD5", Moderate: "#FEF3C7", Low: "#F1F5F9" };
 const TASK_STATUSES = ["Not Started", "Doing", "Follow Up", "Done"];
+const PARTNER_ENGAGED_OPTIONS = ["Yes", "No", "NA"];
 const TASK_STATUS_COLOR = { "Not Started": "#64748B", "Doing": "#3B82F6", "Follow Up": "#D97706", "Done": "#16A34A" };
 const TASK_STATUS_BG = { "Not Started": "#F1F5F9", "Doing": "#DBEAFE", "Follow Up": "#FEF3C7", "Done": "#DCFCE7" };
-const FORECAST_CATS = ["Pipeline", "Stretch", "Commit"];
-const FORECAST_COLOR = { Pipeline: "#64748B", Stretch: "#D97706", Commit: "#16A34A" };
+const FORECAST_CATS = ["Commit", "Gut", "Stretch", "Not Forecasted"];
+const FORECAST_COLOR = { Commit: "#16A34A", Gut: "#D97706", Stretch: "#3B82F6", "Not Forecasted": "#94A3B8" };
 
 const IMPORT_FIELDS = [
   { key: "sfId", label: "Opportunity ID", required: true },
@@ -45,13 +47,12 @@ const IMPORT_FIELDS = [
   { key: "stage", label: "Stage", required: true },
   { key: "closeDate", label: "Close date", required: true },
   { key: "owner", label: "Owner / rep", required: false },
-  { key: "productMargin", label: "Product margin $", required: false },
-  { key: "servicesMargin", label: "Services margin $", required: false },
-  { key: "managedServices", label: "Managed services $", required: false },
+  { key: "commissionableMargin", label: "Commissionable margin $", required: false },
 ];
 
 const ACCOUNT_IMPORT_FIELDS = [
   { key: "name", label: "Account", required: true },
+  { key: "sfAccountId", label: "Salesforce Account ID (optional, preferred for matching)", required: false },
   { key: "territory", label: "Territory", required: false },
   { key: "tier", label: "Tier", required: false },
   { key: "priority", label: "Priority", required: false },
@@ -66,6 +67,7 @@ const ACCOUNT_IMPORT_FIELDS = [
   { key: "flagTaniumTarget", label: "Tanium Target (X)", required: false },
   { key: "flagGrafana", label: "Grafana (X)", required: false },
   { key: "flagObservability", label: "Observability (X)", required: false },
+  { key: "flagNeuBird", label: "NeuBird AI (X)", required: false },
   { key: "snRep", label: "SN Rep", required: false },
   { key: "snStatus", label: "SN Status", required: false },
   { key: "snPriority", label: "SN Priority", required: false },
@@ -82,6 +84,11 @@ const ACCOUNT_IMPORT_FIELDS = [
   { key: "taniumPriority", label: "Tanium Priority", required: false },
   { key: "taniumContacts", label: "Tanium Contacts", required: false },
   { key: "taniumNotes", label: "Tanium Notes", required: false },
+  { key: "neubirdRep", label: "NeuBird Rep", required: false },
+  { key: "neubirdStatus", label: "NeuBird Status", required: false },
+  { key: "neubirdPriority", label: "NeuBird Priority", required: false },
+  { key: "neubirdContacts", label: "NeuBird Contacts", required: false },
+  { key: "neubirdNotes", label: "NeuBird Notes", required: false },
   { key: "owner", label: "Owner / rep (for team scoping)", required: false },
 ];
 
@@ -91,8 +98,17 @@ const ACCOUNT_STATUSES = ["Active", "Not Active"];
 const VENDOR_STATUSES = ["Customer", "Prospect", "Active Conversations"];
 const VENDOR_STATUS_COLOR = { Customer: "#16A34A", Prospect: "#3B82F6", "Active Conversations": "#D97706" };
 const VENDOR_STATUS_BG = { Customer: "#DCFCE7", Prospect: "#DBEAFE", "Active Conversations": "#FEF3C7" };
+const BURNT_ORANGE = "#BF5700";
 const ACCOUNT_GROUP_FIELD_LABEL = { cd: "CD", status: "Status", territory: "Territory", priority: "Priority", tier: "Tier" };
 const ACCOUNT_GROUP_ORDER = { priority: ACCOUNT_PRIORITIES, status: ACCOUNT_STATUSES, tier: ACCOUNT_TIERS };
+
+const CAMPAIGN_STATUSES = ["Planning", "Active", "Paused", "Completed"];
+const CAMPAIGN_STATUS_COLOR = { Planning: "#64748B", Active: "#16A34A", Paused: "#D97706", Completed: "#3B82F6" };
+const CAMPAIGN_STATUS_BG = { Planning: "#F1F5F9", Active: "#DCFCE7", Paused: "#FEF3C7", Completed: "#DBEAFE" };
+
+const SOURCE_OPTIONS = ["Install Base", "Prospecting", "Partners"];
+const SOURCE_COLOR = { "Install Base": "#3B82F6", "Prospecting": "#16A34A", "Partners": "#7C3AED", "Unspecified": "#94A3B8" };
+const SOURCE_BG = { "Install Base": "#DBEAFE", "Prospecting": "#DCFCE7", "Partners": "#EDE9FE", "Unspecified": "#F1F5F9" };
 
 const TASK_IMPORT_FIELDS = [
   { key: "name", label: "Name", required: true },
@@ -104,9 +120,25 @@ const TASK_IMPORT_FIELDS = [
   { key: "status", label: "Status", required: false },
   { key: "sseSme", label: "SSE / SME", required: false },
   { key: "partnerContact", label: "Partner Contact", required: false },
+  { key: "partnerEngaged", label: "Partner Engaged (Yes/No/NA)", required: false },
   { key: "isOpp", label: "Opp (marked if tied to an opportunity)", required: false },
   { key: "dealReg", label: "Deal Reg?", required: false },
   { key: "notes", label: "Notes / Next Steps", required: false },
+];
+
+const OPP_IMPORT_FIELDS = [
+  { key: "name", label: "Opportunity name", required: true },
+  { key: "account", label: "Account", required: true },
+  { key: "sfOppId", label: "Salesforce Opportunity ID (optional, preferred for matching)", required: false },
+  { key: "sfAccountId", label: "Salesforce Account ID (optional, preferred for matching)", required: false },
+  { key: "stage", label: "Stage", required: false },
+  { key: "closeDate", label: "Close date", required: false },
+  { key: "owner", label: "Owner / rep", required: false },
+  { key: "commissionableMargin", label: "Commissionable margin $", required: false },
+  { key: "source", label: "Source (Install Base / Prospecting / Partners)", required: false },
+  { key: "forecastCategory", label: "Forecast category", required: false },
+  { key: "nextStep", label: "Next step", required: false },
+  { key: "notes", label: "Notes", required: false },
 ];
 
 // ---------- Color tokens (light theme) ----------
@@ -162,7 +194,12 @@ const daysUntil = (d) => {
   return Math.round((dt - today) / 86400000);
 };
 const daysSince = (d) => (d ? -daysUntil(d) : null);
-const oppTotal = (o) => (Number(o.productMargin) || 0) + (Number(o.servicesMargin) || 0) + (Number(o.managedServices) || 0);
+const oppTotal = (o) => {
+  if (o.commissionableMargin !== undefined && o.commissionableMargin !== null && o.commissionableMargin !== "") {
+    return Number(o.commissionableMargin) || 0;
+  }
+  return (Number(o.productMargin) || 0) + (Number(o.servicesMargin) || 0) + (Number(o.managedServices) || 0);
+};
 const getQuarter = (dateStr) => {
   if (!dateStr) return null;
   const dt = new Date(dateStr + "T00:00:00");
@@ -183,8 +220,9 @@ const quarterOptions = (data) => {
 };
 const suggestForecast = (stage) => {
   if (stage === "Commit") return "Commit";
-  if (stage === "Upside" || stage === "Strong Upside") return "Stretch";
-  return "Pipeline";
+  if (stage === "Strong Upside") return "Gut";
+  if (stage === "Upside") return "Stretch";
+  return "Not Forecasted";
 };
 
 const normalizeDate = (raw) => {
@@ -232,10 +270,12 @@ const DEFAULT_DATA = {
   tasks: [],
   goals: [],
   accounts: [],
+  campaigns: [],
   settings: { coverageTarget: 3, staleDays: 30 },
   importConfig: { colMap: {}, stageMap: {}, lastImportDate: null, lastImportFileName: null },
   accountImportConfig: { colMap: {}, lastImportDate: null, lastImportFileName: null },
   taskImportConfig: { colMap: {}, lastImportDate: null, lastImportFileName: null },
+  oppImportConfig: { colMap: {}, lastImportDate: null, lastImportFileName: null },
 };
 
 // ---------- Region / team / rep helpers ----------
@@ -266,6 +306,28 @@ const ensureUnassignedTeam = (regions, teams) => {
   return { regions: nextRegions, teams: nextTeams, team };
 };
 
+// Resolve an account by name to its id, creating a bare-bones Account record
+// if nothing matches yet. Returns { accounts, id, name } — accounts is the
+// (possibly updated) list to save back, id/name are the resolved account.
+const findOrCreateAccount = (accounts, name) => {
+  const trimmed = (name || "").toString().trim();
+  if (!trimmed) return { accounts, id: null, name: "" };
+  const existing = accounts.find(a => normName(a.name) === normName(trimmed));
+  if (existing) return { accounts, id: existing.id, name: existing.name };
+  const created = {
+    id: uid(), name: trimmed, territory: "", tier: "", priority: "Moderate", status: "Active", cd: "", rep: "", notes: "",
+    mdPriority: false, strategic: false, metCustomer: false,
+    flagServiceNow: false, flagDynatrace: false, flagDtDedicatedProg: false, flagTaniumRevList: false,
+    flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false, flagNeuBird: false,
+    snRep: "", snStatus: "", snPriority: "", snContacts: "", snNotes: "",
+    dtRep: "", dtPsm: "", dtStatus: "", dtPriority: "", dtContacts: "", dtNotes: "",
+    taniumRep: "", taniumStatus: "", taniumPriority: "", taniumContacts: "", taniumNotes: "",
+    neubirdRep: "", neubirdStatus: "", neubirdPriority: "", neubirdContacts: "", neubirdNotes: "",
+    createdAt: todayStr(),
+  };
+  return { accounts: [...accounts, created], id: created.id, name: created.name };
+};
+
 const mergeLoadedData = (parsed) => {
   let merged = {
     ...DEFAULT_DATA, ...parsed,
@@ -273,7 +335,9 @@ const mergeLoadedData = (parsed) => {
     importConfig: { ...DEFAULT_DATA.importConfig, ...(parsed.importConfig || {}) },
     accountImportConfig: { ...DEFAULT_DATA.accountImportConfig, ...(parsed.accountImportConfig || {}) },
     taskImportConfig: { ...DEFAULT_DATA.taskImportConfig, ...(parsed.taskImportConfig || {}) },
+    oppImportConfig: { ...DEFAULT_DATA.oppImportConfig, ...(parsed.oppImportConfig || {}) },
     accounts: parsed.accounts || [],
+    campaigns: parsed.campaigns || [],
   };
   // migrate legacy flat teamName/reps shape into regions/teams
   if (!parsed.teams && (parsed.teamName || parsed.reps)) {
@@ -283,6 +347,32 @@ const mergeLoadedData = (parsed) => {
   }
   if (!merged.regions || merged.regions.length === 0) merged.regions = DEFAULT_DATA.regions;
   if (!merged.teams || merged.teams.length === 0) merged.teams = DEFAULT_DATA.teams;
+
+  // Backfill accountId on opportunities/tasks that only have the legacy
+  // free-text account name, so the new relational links exist for data
+  // entered before accounts/opportunities/tasks were tied together by id.
+  let backfillAccounts = merged.accounts;
+  merged.opportunities = (merged.opportunities || []).map(o => {
+    let next = o;
+    if (!next.accountId && next.account && next.account.trim()) {
+      const res = findOrCreateAccount(backfillAccounts, next.account);
+      backfillAccounts = res.accounts;
+      next = { ...next, accountId: res.id };
+    }
+    if (next.commissionableMargin === undefined || next.commissionableMargin === null || next.commissionableMargin === "") {
+      const legacySum = (Number(next.productMargin) || 0) + (Number(next.servicesMargin) || 0) + (Number(next.managedServices) || 0);
+      if (legacySum > 0) next = { ...next, commissionableMargin: legacySum };
+    }
+    return next;
+  });
+  merged.tasks = (merged.tasks || []).map(t => {
+    if (t.accountId || !t.account || !t.account.trim()) return t;
+    const res = findOrCreateAccount(backfillAccounts, t.account);
+    backfillAccounts = res.accounts;
+    return { ...t, accountId: res.id };
+  });
+  merged.accounts = backfillAccounts;
+
   return merged;
 };
 
@@ -423,20 +513,22 @@ function Field({ label, children }) {
 }
 
 // ---------- Opportunity form ----------
-function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onOpenTask, onAddTask }) {
-  const [f, setF] = useState(initial || {
-    name: "", account: "", stage: "Prospecting", closeDate: "",
-    productMargin: "", servicesMargin: "", managedServices: "",
-    rep: reps[0] || "", nextStep: "", notes: "", forecastCategory: "Pipeline"
+function OpportunityForm({ initial, reps, accounts, campaigns, tasks, onSave, onCancel, onDelete, onOpenTask, onAddTask }) {
+  const isEdit = !!(initial && initial.id);
+  const [f, setF] = useState({
+    name: "", account: "", accountId: null, campaignId: "", source: "", stage: "Prospecting", closeDate: "",
+    commissionableMargin: "",
+    rep: reps[0] || "", nextStep: "", notes: "", forecastCategory: "Pipeline",
+    ...(initial || {}),
   });
-  const [fcTouched, setFcTouched] = useState(!!initial);
+  const [fcTouched, setFcTouched] = useState(isEdit);
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
   const setStage = (stage) => {
     setF(prev => ({ ...prev, stage, forecastCategory: fcTouched ? prev.forecastCategory : suggestForecast(stage) }));
   };
   const submit = () => {
     if (!(f.name && f.account)) return;
-    const stageChanged = !initial || initial.stage !== f.stage;
+    const stageChanged = !isEdit || initial.stage !== f.stage;
     onSave({
       ...f,
       id: initial?.id || uid(),
@@ -444,6 +536,7 @@ function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onO
       createdAt: initial?.createdAt || todayStr(),
     });
   };
+  const campaignsForAccount = f.accountId ? campaigns.filter(c => c.accountIds.includes(f.accountId)) : [];
   return (
     <div>
       {f.sfId && (
@@ -460,11 +553,24 @@ function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onO
         <input style={inputStyle} value={f.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Acme Corp – Network Refresh" />
       </Field>
       <div style={rowStyle}>
-        <Field label="Account"><input style={inputStyle} value={f.account} onChange={e => set("account", e.target.value)} placeholder="Company name" /></Field>
+        <Field label="Account">
+          <AccountAutocomplete accounts={accounts} name={f.account} accountId={f.accountId} onChange={(name, accountId) => setF(prev => ({ ...prev, account: name, accountId, campaignId: prev.accountId === accountId ? prev.campaignId : "" }))} />
+        </Field>
         <Field label="Owner (rep)">
           <select style={inputStyle} value={f.rep} onChange={e => set("rep", e.target.value)}>
             {reps.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
+        </Field>
+      </div>
+      <div style={rowStyle}>
+        <Field label="Source">
+          <select style={inputStyle} value={f.source || ""} onChange={e => set("source", e.target.value)}>
+            <option value="">— Unspecified —</option>
+            {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="Sourced from campaign">
+          <CampaignPicker campaigns={campaignsForAccount} value={f.campaignId} onChange={v => set("campaignId", v)} />
         </Field>
       </div>
       <div style={rowStyle}>
@@ -478,30 +584,23 @@ function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onO
         </Field>
       </div>
       <Field label="Forecast category">
-        <select style={inputStyle} value={f.forecastCategory || "Pipeline"} onChange={e => { setFcTouched(true); set("forecastCategory", e.target.value); }}>
+        <select style={inputStyle} value={f.forecastCategory || "Not Forecasted"} onChange={e => { setFcTouched(true); set("forecastCategory", e.target.value); }}>
           {FORECAST_CATS.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </Field>
-      <label style={{ ...labelStyle, marginTop: 2 }}>Revenue by category ($)</label>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        {CATEGORIES.map(c => (
-          <div key={c.key}>
-            <label style={{ fontSize: 11, color: c.color, marginBottom: 4, display: "block", fontWeight: 600 }}>{c.label}</label>
-            <input type="number" style={{ ...inputStyle, marginBottom: 14 }} value={f[c.key]}
-              onChange={e => set(c.key, e.target.value)} placeholder="0" />
-          </div>
-        ))}
-      </div>
+      <Field label="Commissionable margin ($)">
+        <input type="number" style={inputStyle} value={f.commissionableMargin} onChange={e => set("commissionableMargin", e.target.value)} placeholder="0" />
+      </Field>
       <Field label="Next step">
         <input style={inputStyle} value={f.nextStep} onChange={e => set("nextStep", e.target.value)} placeholder="What happens next?" />
       </Field>
       <Field label="Notes">
         <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={f.notes} onChange={e => set("notes", e.target.value)} />
       </Field>
-      {initial && (
+      {isEdit && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <label style={{ ...labelStyle, marginBottom: 0 }}>Tasks for this account ({(tasks || []).length})</label>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Tasks ({(tasks || []).length})</label>
             {onAddTask && (
               <button type="button" style={{ ...ghostBtn, padding: "4px 9px", fontSize: 11.5 }} onClick={onAddTask}>
                 <Plus size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Add task
@@ -510,22 +609,28 @@ function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onO
           </div>
           <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
             {(tasks || []).length === 0 && (
-              <div style={{ padding: "10px 12px", fontSize: 12.5, color: C.textMute, background: "#F8FAFC" }}>No tasks linked to this account yet.</div>
+              <div style={{ padding: "10px 12px", fontSize: 12.5, color: C.textMute, background: "#F8FAFC" }}>No tasks linked to this opportunity yet.</div>
             )}
             {(tasks || []).map((t, i) => {
               const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
+              const hasNotes = !!(t.notes && t.notes.trim());
               return (
                 <div key={t.id} onClick={() => onOpenTask && onOpenTask(t)} style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "9px 12px",
+                  padding: "9px 12px",
                   borderBottom: i < tasks.length - 1 ? `1px solid ${C.border}` : "none",
                   background: "#F8FAFC", cursor: onOpenTask ? "pointer" : "default"
                 }}>
-                  <span style={{
-                    fontSize: 13, color: t.status === "Done" ? C.textMute : C.text,
-                    textDecoration: t.status === "Done" ? "line-through" : "none", flex: 1
-                  }}>{t.title}</span>
-                  <Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill>
-                  <span style={{ fontSize: 11.5, minWidth: 66, textAlign: "right", color: overdue ? C.red : C.textMute }}>{fmtDate(t.dueDate)}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{
+                      fontSize: 13, fontWeight: 600, color: t.status === "Done" ? C.textMute : C.text,
+                      textDecoration: t.status === "Done" ? "line-through" : "none", flex: 1
+                    }}>{t.title}</span>
+                    <Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill>
+                    <span style={{ fontSize: 11.5, minWidth: 66, textAlign: "right", color: overdue ? C.red : C.textMute }}>{fmtDate(t.dueDate)}</span>
+                  </div>
+                  {hasNotes && (
+                    <div style={{ fontSize: 12.5, color: C.textSoft, whiteSpace: "pre-wrap", marginTop: 6 }}>{t.notes}</div>
+                  )}
                 </div>
               );
             })}
@@ -534,7 +639,7 @@ function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onO
       )}
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
         <div>
-          {initial && onDelete && (
+          {isEdit && onDelete && (
             <button style={{ ...ghostBtn, ...dangerText, borderColor: "#FECACA" }} onClick={() => onDelete(initial.id)}>
               <Trash2 size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Delete
             </button>
@@ -542,65 +647,7 @@ function OpportunityForm({ initial, reps, tasks, onSave, onCancel, onDelete, onO
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button style={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button style={primaryBtn} onClick={submit}>{initial ? "Save changes" : "Add opportunity"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------- Activity form ----------
-function ActivityForm({ initial, reps, opportunities, onSave, onCancel, onDelete }) {
-  const today = todayStr();
-  const [f, setF] = useState(initial || {
-    type: "Call", date: today, rep: reps[0] || "", account: "", contact: "", oppId: "", notes: ""
-  });
-  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
-  return (
-    <div>
-      <div style={rowStyle}>
-        <Field label="Activity type">
-          <select style={inputStyle} value={f.type} onChange={e => set("type", e.target.value)}>
-            {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </Field>
-        <Field label="Date">
-          <input type="date" style={inputStyle} value={f.date} onChange={e => set("date", e.target.value)} />
-        </Field>
-      </div>
-      <div style={rowStyle}>
-        <Field label="Rep">
-          <select style={inputStyle} value={f.rep} onChange={e => set("rep", e.target.value)}>
-            {reps.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </Field>
-        <Field label="Linked opportunity (optional)">
-          <select style={inputStyle} value={f.oppId} onChange={e => set("oppId", e.target.value)}>
-            <option value="">None</option>
-            {opportunities.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        </Field>
-      </div>
-      <div style={rowStyle}>
-        <Field label="Account"><input style={inputStyle} value={f.account} onChange={e => set("account", e.target.value)} /></Field>
-        <Field label="Contact"><input style={inputStyle} value={f.contact} onChange={e => set("contact", e.target.value)} /></Field>
-      </div>
-      <Field label="Notes / outcome">
-        <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={f.notes} onChange={e => set("notes", e.target.value)} />
-      </Field>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-        <div>
-          {initial && onDelete && (
-            <button style={{ ...ghostBtn, ...dangerText, borderColor: "#FECACA" }} onClick={() => onDelete(initial.id)}>
-              <Trash2 size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Delete
-            </button>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button style={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button style={primaryBtn} onClick={() => f.account && onSave({ ...f, id: initial?.id || uid() })}>
-            {initial ? "Save changes" : "Log activity"}
-          </button>
+          <button style={primaryBtn} onClick={submit}>{isEdit ? "Save changes" : "Add opportunity"}</button>
         </div>
       </div>
     </div>
@@ -608,21 +655,41 @@ function ActivityForm({ initial, reps, opportunities, onSave, onCancel, onDelete
 }
 
 // ---------- Account search/autocomplete (free text) ----------
-function AccountAutocomplete({ accounts, value, onChange }) {
+function AccountAutocomplete({ accounts, name, accountId, onChange }) {
   const [open, setOpen] = useState(false);
-  const q = (value || "").trim().toLowerCase();
+  const [query, setQuery] = useState("");
+  const linked = accountId ? accounts.find(a => a.id === accountId) : null;
+  const q = query.trim().toLowerCase();
   const matches = (q
     ? accounts.filter(a => a.name.toLowerCase().includes(q))
     : accounts
   ).slice(0, 8);
+
+  if (linked) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "8px 11px", marginBottom: 14
+      }}>
+        <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+          <Check size={13} color={C.green} style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linked.name}</span>
+        </div>
+        <button type="button" onClick={() => { onChange("", null); setQuery(""); }} style={{ ...iconBtnStyle, width: 26, height: 26, flexShrink: 0 }} title="Change account">
+          <X size={13} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: "relative", marginBottom: 14 }}>
       <input
         style={{ ...inputStyle, marginBottom: 0 }}
-        placeholder="Account name"
-        value={value}
+        placeholder="Search accounts, or type a new name…"
+        value={query || name || ""}
         onFocus={() => setOpen(true)}
-        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value, null); setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && matches.length > 0 && (
@@ -633,7 +700,7 @@ function AccountAutocomplete({ accounts, value, onChange }) {
         }}>
           {matches.map(a => (
             <div key={a.id}
-              onMouseDown={e => { e.preventDefault(); onChange(a.name); setOpen(false); }}
+              onMouseDown={e => { e.preventDefault(); onChange(a.name, a.id); setQuery(""); setOpen(false); }}
               style={{ padding: "8px 12px", cursor: "pointer", fontSize: 13, color: C.text }}
             >
               {a.name}{a.cd && <span style={{ color: C.textMute, fontSize: 11.5 }}> · CD: {a.cd}</span>}
@@ -641,19 +708,133 @@ function AccountAutocomplete({ accounts, value, onChange }) {
           ))}
         </div>
       )}
+      {!q && name && (
+        <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>No existing account matches "{name}" — a new account record will be created when you save.</div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Opportunity search/select (for linking tasks to a specific deal) ----------
+function OpportunityPicker({ opportunities, value, onChange }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selected = opportunities.find(o => o.id === value);
+  const q = query.trim().toLowerCase();
+  const matches = (q
+    ? opportunities.filter(o => o.name.toLowerCase().includes(q) || (o.account || "").toLowerCase().includes(q))
+    : opportunities
+  ).slice(0, 8);
+
+  if (selected) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", marginBottom: 14
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name}</div>
+          <div style={{ fontSize: 11.5, color: C.textMute }}>{selected.account}</div>
+        </div>
+        <button type="button" onClick={() => onChange("")} style={{ ...iconBtnStyle, width: 26, height: 26, flexShrink: 0 }} title="Remove link">
+          <X size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative", marginBottom: 14 }}>
+      <input
+        style={{ ...inputStyle, marginBottom: 0 }}
+        placeholder={opportunities.length ? "Search opportunities…" : "No opportunities for this account yet"}
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 8,
+          boxShadow: "0 8px 24px rgba(15,23,42,0.14)", maxHeight: 230, overflowY: "auto"
+        }}>
+          <div
+            onMouseDown={e => { e.preventDefault(); onChange(""); setQuery(""); setOpen(false); }}
+            style={{ padding: "9px 12px", fontSize: 12.5, color: C.textMute, fontStyle: "italic", cursor: "pointer", borderBottom: `1px solid ${C.border}` }}
+          >No opportunity</div>
+          {matches.map(o => (
+            <div key={o.id}
+              onMouseDown={e => { e.preventDefault(); onChange(o.id); setQuery(""); setOpen(false); }}
+              style={{ padding: "9px 12px", cursor: "pointer" }}
+            >
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{o.name}</div>
+              <div style={{ fontSize: 11.5, color: C.textMute }}>{o.account}</div>
+            </div>
+          ))}
+          {matches.length === 0 && <div style={{ padding: "9px 12px", fontSize: 12.5, color: C.textMute }}>No matches</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Campaign picker (for attributing an opportunity back to a campaign) ----------
+function CampaignPicker({ campaigns, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const selected = campaigns.find(c => c.id === value);
+  if (selected) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 11px", marginBottom: 14
+      }}>
+        <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name}</span>
+          <Pill color={CAMPAIGN_STATUS_COLOR[selected.status]} bg={CAMPAIGN_STATUS_BG[selected.status]}>{selected.status}</Pill>
+        </div>
+        <button type="button" onClick={() => onChange("")} style={{ ...iconBtnStyle, width: 26, height: 26, flexShrink: 0 }} title="Remove link">
+          <X size={13} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: "relative", marginBottom: 14 }}>
+      <select
+        style={inputStyle}
+        value=""
+        onChange={e => e.target.value && onChange(e.target.value)}
+      >
+        <option value="">{campaigns.length ? "No campaign — select to attribute" : "No campaigns target this account"}</option>
+        {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
     </div>
   );
 }
 
 // ---------- Task form ----------
-function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
+function TaskForm({ initial, reps, accounts, opportunities, onSave, onCancel, onDelete }) {
   const isEdit = !!(initial && initial.id);
   const [f, setF] = useState({
-    title: "", account: "", cd: "", sseSme: "", partnerContact: "", dealReg: "", rep: reps[0] || "", dueDate: "",
+    title: "", account: "", accountId: null, oppId: "", cd: "", sseSme: "", partnerContact: "", partnerEngaged: "", dealReg: "", rep: reps[0] || "", dueDate: "",
     priority: "Moderate", status: "Not Started", isOpp: false, notes: "",
     ...(initial || {}),
   });
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+  const setAccount = (name, accountId) => {
+    setF(prev => {
+      // if switching to a different account, drop any opportunity link that no longer applies
+      const oppStillValid = prev.oppId && opportunities.find(o => o.id === prev.oppId)?.accountId === accountId;
+      return { ...prev, account: name, accountId, oppId: oppStillValid ? prev.oppId : "" };
+    });
+  };
+  const isAhead = normName(f.account) === "ahead";
+  const oppsForAccount = f.accountId ? opportunities.filter(o => o.accountId === f.accountId) : [];
+  const submit = () => {
+    if (!f.title) return;
+    onSave({ ...f, id: initial?.id || uid(), isOpp: f.oppId ? true : !!f.isOpp });
+  };
   return (
     <div>
       <Field label="Name">
@@ -661,12 +842,15 @@ function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
       </Field>
       <div style={rowStyle}>
         <Field label="Account">
-          <AccountAutocomplete accounts={accounts} value={f.account} onChange={v => set("account", v)} />
+          <AccountAutocomplete accounts={accounts} name={f.account} accountId={f.accountId} onChange={setAccount} />
         </Field>
         <Field label="CD">
           <input style={inputStyle} value={f.cd} onChange={e => set("cd", e.target.value)} placeholder="Client / coverage director" />
         </Field>
       </div>
+      <Field label={`Opportunity${isAhead ? " (not required for AHEAD)" : ""}`}>
+        <OpportunityPicker opportunities={oppsForAccount} value={f.oppId} onChange={v => set("oppId", v)} />
+      </Field>
       <div style={rowStyle}>
         <Field label="Owner">
           <select style={inputStyle} value={f.rep} onChange={e => set("rep", e.target.value)}>
@@ -677,9 +861,15 @@ function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
           <input style={inputStyle} value={f.sseSme} onChange={e => set("sseSme", e.target.value)} placeholder="Technical resource" />
         </Field>
       </div>
-      <div style={rowStyle}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <Field label="Partner Contact">
           <input style={inputStyle} value={f.partnerContact} onChange={e => set("partnerContact", e.target.value)} placeholder="Partner-side contact" />
+        </Field>
+        <Field label="Partner Engaged">
+          <select style={inputStyle} value={f.partnerEngaged || ""} onChange={e => set("partnerEngaged", e.target.value)}>
+            <option value="">—</option>
+            {PARTNER_ENGAGED_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
         </Field>
         <Field label="Deal Reg?">
           <input style={inputStyle} value={f.dealReg} onChange={e => set("dealReg", e.target.value)} placeholder="e.g. TBD, Pending, Approved" />
@@ -695,20 +885,11 @@ function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
           <input type="date" style={inputStyle} value={f.dueDate} onChange={e => set("dueDate", e.target.value)} />
         </Field>
       </div>
-      <div style={rowStyle}>
-        <Field label="Status">
-          <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
-            {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </Field>
-        <Field label=" ">
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.text, marginTop: 9, cursor: "pointer" }}>
-            <input type="checkbox" checked={!!f.isOpp} onChange={e => set("isOpp", e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: C.green, cursor: "pointer" }} />
-            Tied to an opportunity
-          </label>
-        </Field>
-      </div>
+      <Field label="Status">
+        <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
+          {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </Field>
       <Field label="Notes / Next steps">
         <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical" }} value={f.notes} onChange={e => set("notes", e.target.value)} />
       </Field>
@@ -722,7 +903,7 @@ function TaskForm({ initial, reps, accounts, onSave, onCancel, onDelete }) {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button style={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button style={primaryBtn} onClick={() => f.title && onSave({ ...f, id: initial?.id || uid() })}>
+          <button style={primaryBtn} onClick={submit}>
             {isEdit ? "Save changes" : "Add task"}
           </button>
         </div>
@@ -784,10 +965,11 @@ function AccountForm({ initial, reps, computed, tasks, onSave, onCancel, onDelet
     name: "", territory: "", tier: "", priority: "Moderate", status: "Active", cd: "", rep: reps[0] || "", notes: "",
     mdPriority: false, strategic: false, metCustomer: false,
     flagServiceNow: false, flagDynatrace: false, flagDtDedicatedProg: false, flagTaniumRevList: false,
-    flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false,
+    flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false, flagNeuBird: false,
     snRep: "", snStatus: "", snPriority: "", snContacts: "", snNotes: "",
     dtRep: "", dtPsm: "", dtStatus: "", dtPriority: "", dtContacts: "", dtNotes: "",
     taniumRep: "", taniumStatus: "", taniumPriority: "", taniumContacts: "", taniumNotes: "",
+    neubirdRep: "", neubirdStatus: "", neubirdPriority: "", neubirdContacts: "", neubirdNotes: "",
   });
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
   const flagLabel = (key, label) => (
@@ -863,6 +1045,7 @@ function AccountForm({ initial, reps, computed, tasks, onSave, onCancel, onDelet
         {flagLabel("flagTaniumTarget", "Tanium Target")}
         {flagLabel("flagGrafana", "Grafana")}
         {flagLabel("flagObservability", "Observability")}
+        {flagLabel("flagNeuBird", "NeuBird AI")}
       </div>
 
       {sectionHeader("ServiceNow", "#3B82F6")}
@@ -909,6 +1092,20 @@ function AccountForm({ initial, reps, computed, tasks, onSave, onCancel, onDelet
       <Field label="Tanium Priority"><input style={inputStyle} value={f.taniumPriority} onChange={e => set("taniumPriority", e.target.value)} placeholder="e.g. High, Moderate, Low, A, B" /></Field>
       <Field label="Tanium Contacts"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.taniumContacts} onChange={e => set("taniumContacts", e.target.value)} /></Field>
       <Field label="Tanium Notes"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.taniumNotes} onChange={e => set("taniumNotes", e.target.value)} /></Field>
+
+      {sectionHeader("NeuBird AI", BURNT_ORANGE)}
+      <div style={rowStyle}>
+        <Field label="NeuBird Rep"><input style={inputStyle} value={f.neubirdRep} onChange={e => set("neubirdRep", e.target.value)} /></Field>
+        <Field label="NeuBird Status">
+          <select style={inputStyle} value={f.neubirdStatus} onChange={e => set("neubirdStatus", e.target.value)}>
+            <option value="">—</option>
+            {VENDOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="NeuBird Priority"><input style={inputStyle} value={f.neubirdPriority} onChange={e => set("neubirdPriority", e.target.value)} placeholder="e.g. High, Moderate, Low" /></Field>
+      <Field label="NeuBird Contacts"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.neubirdContacts} onChange={e => set("neubirdContacts", e.target.value)} /></Field>
+      <Field label="NeuBird Notes"><textarea style={{ ...inputStyle, minHeight: 44, resize: "vertical" }} value={f.neubirdNotes} onChange={e => set("neubirdNotes", e.target.value)} /></Field>
 
       {initial && (
         <div style={{ marginBottom: 16, marginTop: 18 }}>
@@ -963,7 +1160,151 @@ function AccountForm({ initial, reps, computed, tasks, onSave, onCancel, onDelet
   );
 }
 
-// ---------- Import wizard ----------
+// ---------- Multi-account picker (for assigning accounts to a campaign) ----------
+function AccountMultiPicker({ accounts, selectedIds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = selectedIds.map(id => accounts.find(a => a.id === id)).filter(Boolean);
+  const q = query.trim().toLowerCase();
+  const matches = accounts
+    .filter(a => !selectedIds.includes(a.id))
+    .filter(a => !q || a.name.toLowerCase().includes(q))
+    .slice(0, 8);
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {selected.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {selected.map(a => (
+            <span key={a.id} style={{
+              display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: C.text,
+              background: "#F1F5F9", border: `1px solid ${C.border}`, borderRadius: 999, padding: "4px 6px 4px 10px"
+            }}>
+              {a.name}
+              <span onClick={() => onChange(selectedIds.filter(id => id !== a.id))} style={{ cursor: "pointer", color: C.textMute, display: "flex" }}>
+                <X size={12} />
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ position: "relative" }}>
+        <input
+          style={{ ...inputStyle, marginBottom: 0 }}
+          placeholder="Search accounts to add…"
+          value={query}
+          onFocus={() => setOpen(true)}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+        />
+        {open && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
+            background: C.card, border: `1px solid ${C.border}`, borderRadius: 8,
+            boxShadow: "0 8px 24px rgba(15,23,42,0.14)", maxHeight: 200, overflowY: "auto"
+          }}>
+            {matches.map(a => (
+              <div key={a.id}
+                onMouseDown={e => { e.preventDefault(); onChange([...selectedIds, a.id]); setQuery(""); }}
+                style={{ padding: "8px 12px", cursor: "pointer", fontSize: 13, color: C.text }}
+              >
+                {a.name}{a.cd && <span style={{ color: C.textMute, fontSize: 11.5 }}> · CD: {a.cd}</span>}
+              </div>
+            ))}
+            {matches.length === 0 && <div style={{ padding: "8px 12px", fontSize: 12.5, color: C.textMute }}>{accounts.length === 0 ? "No accounts yet — add some in the Accounts tab" : "No matches"}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Campaign form ----------
+function CampaignForm({ initial, accounts, opportunities, onSave, onCancel, onDelete }) {
+  const [f, setF] = useState(initial || {
+    name: "", bdr: "", status: "Planning", startDate: "", endDate: "", notes: "", accountIds: [],
+  });
+  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+
+  const attributed = initial ? opportunities.filter(o => o.campaignId === initial.id) : [];
+  const won = attributed.filter(o => o.stage === "Closed Won");
+  const totalValue = attributed.reduce((s, o) => s + oppTotal(o), 0);
+  const wonValue = won.reduce((s, o) => s + oppTotal(o), 0);
+
+  return (
+    <div>
+      <Field label="Campaign name">
+        <input style={inputStyle} value={f.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Q3 ServiceNow Push — Michigan" />
+      </Field>
+      <div style={rowStyle}>
+        <Field label="BDR"><input style={inputStyle} value={f.bdr} onChange={e => set("bdr", e.target.value)} placeholder="Who's running this campaign" /></Field>
+        <Field label="Status">
+          <select style={inputStyle} value={f.status} onChange={e => set("status", e.target.value)}>
+            {CAMPAIGN_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={rowStyle}>
+        <Field label="Start date"><input type="date" style={inputStyle} value={f.startDate} onChange={e => set("startDate", e.target.value)} /></Field>
+        <Field label="End date"><input type="date" style={inputStyle} value={f.endDate} onChange={e => set("endDate", e.target.value)} /></Field>
+      </div>
+      <Field label={`Accounts (${f.accountIds.length})`}>
+        <AccountMultiPicker accounts={accounts} selectedIds={f.accountIds} onChange={ids => set("accountIds", ids)} />
+      </Field>
+      <Field label="Notes">
+        <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={f.notes} onChange={e => set("notes", e.target.value)} />
+      </Field>
+
+      {initial && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ ...labelStyle, marginBottom: 8 }}>Attribution</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 8, padding: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{attributed.length}</div>
+              <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Opportunities</div>
+            </div>
+            <div style={{ background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 8, padding: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{fmtMoneyShort(totalValue)}</div>
+              <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Pipeline value</div>
+            </div>
+            <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: C.green }}>{won.length} · {fmtMoneyShort(wonValue)}</div>
+              <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Closed won</div>
+            </div>
+          </div>
+          {attributed.length > 0 && (
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+              {attributed.map((o, i) => (
+                <div key={o.id} style={{
+                  display: "flex", justifyContent: "space-between", padding: "8px 12px",
+                  borderBottom: i < attributed.length - 1 ? `1px solid ${C.border}` : "none", fontSize: 12.5, background: "#F8FAFC"
+                }}>
+                  <span style={{ color: C.text }}>{o.name} <span style={{ color: C.textMute }}>— {o.account}</span></span>
+                  <span style={{ color: C.textSoft }}>{o.stage} · {fmtMoneyShort(oppTotal(o))}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+        <div>
+          {initial && onDelete && (
+            <button style={{ ...ghostBtn, ...dangerText, borderColor: "#FECACA" }} onClick={() => onDelete(initial.id)}>
+              <Trash2 size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Delete
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={ghostBtn} onClick={onCancel}>Cancel</button>
+          <button style={primaryBtn} onClick={() => f.name && onSave({ ...f, id: initial?.id || uid(), createdAt: initial?.createdAt || todayStr() })}>
+            {initial ? "Save changes" : "Add campaign"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function ImportWizard({ data, onClose, onApply }) {
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
@@ -1008,9 +1349,7 @@ function ImportWizard({ data, onClose, onApply }) {
           else if (f.key === "stage") nextMap[f.key] = guessField(hdrs, ["stage"]);
           else if (f.key === "closeDate") nextMap[f.key] = guessField(hdrs, ["close date", "closedate"]);
           else if (f.key === "owner") nextMap[f.key] = guessField(hdrs, ["owner", "rep"]);
-          else if (f.key === "productMargin") nextMap[f.key] = guessField(hdrs, ["product margin", "product"]);
-          else if (f.key === "servicesMargin") nextMap[f.key] = guessField(hdrs, ["services margin", "service"]);
-          else if (f.key === "managedServices") nextMap[f.key] = guessField(hdrs, ["managed services", "managed"]);
+          else if (f.key === "commissionableMargin") nextMap[f.key] = guessField(hdrs, ["commissionable margin", "commission", "margin", "gross profit", "gp"]);
         });
         setColMap(nextMap);
         setStep(2);
@@ -1074,6 +1413,7 @@ function ImportWizard({ data, onClose, onApply }) {
     const existingBySfId = new Map(data.opportunities.filter(o => o.sfId).map(o => [o.sfId, o]));
     const seen = new Set();
     let opps = data.opportunities.map(o => ({ ...o }));
+    let accounts = data.accounts.map(a => ({ ...a }));
     let regions = data.regions.map(r => ({ ...r }));
     let teams = data.teams.map(t => ({ ...t, reps: [...t.reps] }));
     const knownReps = new Set(allRepNames(data));
@@ -1098,9 +1438,13 @@ function ImportWizard({ data, onClose, onApply }) {
       const account = (r[colMap.account] || "").toString().trim();
       const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
       if (owner && !knownReps.has(owner)) addUnassignedRep(owner);
-      const productMargin = colMap.productMargin ? numOrZero(r[colMap.productMargin]) : undefined;
-      const servicesMargin = colMap.servicesMargin ? numOrZero(r[colMap.servicesMargin]) : undefined;
-      const managedServices = colMap.managedServices ? numOrZero(r[colMap.managedServices]) : undefined;
+      let accountId = null;
+      if (account) {
+        const res = findOrCreateAccount(accounts, account);
+        accounts = res.accounts;
+        accountId = res.id;
+      }
+      const commissionableMargin = colMap.commissionableMargin ? numOrZero(r[colMap.commissionableMargin]) : undefined;
 
       const existing = existingBySfId.get(sfId);
       if (existing) {
@@ -1110,20 +1454,19 @@ function ImportWizard({ data, onClose, onApply }) {
           ...opps[idx],
           name: name || opps[idx].name,
           account: account || opps[idx].account,
+          accountId: accountId || opps[idx].accountId || null,
           stage, closeDate,
           rep: owner || opps[idx].rep,
-          productMargin: productMargin !== undefined ? productMargin : opps[idx].productMargin,
-          servicesMargin: servicesMargin !== undefined ? servicesMargin : opps[idx].servicesMargin,
-          managedServices: managedServices !== undefined ? managedServices : opps[idx].managedServices,
+          commissionableMargin: commissionableMargin !== undefined ? commissionableMargin : opps[idx].commissionableMargin,
           forecastCategory: stageChanged ? suggestForecast(stage) : (opps[idx].forecastCategory || suggestForecast(stage)),
           lastStageChange: stageChanged ? todayStr() : (opps[idx].lastStageChange || todayStr()),
           sfStatus: "active", lastSynced: todayStr(),
         };
       } else {
         opps.push({
-          id: uid(), sfId, name, account, stage, closeDate,
+          id: uid(), sfId, name, account, accountId, stage, closeDate,
           rep: owner || "Unassigned",
-          productMargin: productMargin || 0, servicesMargin: servicesMargin || 0, managedServices: managedServices || 0,
+          commissionableMargin: commissionableMargin || 0,
           nextStep: "", notes: "", sfStatus: "active", lastSynced: todayStr(),
           forecastCategory: suggestForecast(stage), lastStageChange: todayStr(), createdAt: todayStr(),
         });
@@ -1134,7 +1477,7 @@ function ImportWizard({ data, onClose, onApply }) {
 
     onApply({
       ...data,
-      regions, teams,
+      regions, teams, accounts,
       opportunities: opps,
       importConfig: { colMap, stageMap, lastImportDate: todayStr(), lastImportFileName: fileName },
     });
@@ -1323,7 +1666,8 @@ function AccountImportWizard({ data, onClose, onApply }) {
         const nextMap = {};
         ACCOUNT_IMPORT_FIELDS.forEach(f => {
           if (savedMap[f.key] && hdrs.includes(savedMap[f.key])) { nextMap[f.key] = savedMap[f.key]; return; }
-          if (f.key === "name") nextMap[f.key] = guessField(hdrs, ["account"]);
+          if (f.key === "name") nextMap[f.key] = guessField(hdrs, ["account"], ["id"]);
+          else if (f.key === "sfAccountId") nextMap[f.key] = guessField(hdrs, ["account id", "account  id", "sfdc id", "record id"]);
           else if (f.key === "territory") nextMap[f.key] = guessField(hdrs, ["territory"]);
           else if (f.key === "tier") nextMap[f.key] = guessField(hdrs, ["tier"]);
           else if (f.key === "priority") nextMap[f.key] = guessField(hdrs, ["priority"], ["sn ", "dt ", "tanium"]);
@@ -1354,6 +1698,12 @@ function AccountImportWizard({ data, onClose, onApply }) {
           else if (f.key === "taniumPriority") nextMap[f.key] = guessField(hdrs, ["tanium priority"]);
           else if (f.key === "taniumContacts") nextMap[f.key] = guessField(hdrs, ["tanium contact"]);
           else if (f.key === "taniumNotes") nextMap[f.key] = guessField(hdrs, ["tanium note"]);
+          else if (f.key === "neubirdRep") nextMap[f.key] = guessField(hdrs, ["neubird rep"]);
+          else if (f.key === "neubirdStatus") nextMap[f.key] = guessField(hdrs, ["neubird status"]);
+          else if (f.key === "neubirdPriority") nextMap[f.key] = guessField(hdrs, ["neubird priority"]);
+          else if (f.key === "neubirdContacts") nextMap[f.key] = guessField(hdrs, ["neubird contact"]);
+          else if (f.key === "neubirdNotes") nextMap[f.key] = guessField(hdrs, ["neubird note"]);
+          else if (f.key === "flagNeuBird") nextMap[f.key] = guessField(hdrs, ["neubird"]);
           else if (f.key === "owner") nextMap[f.key] = guessField(hdrs, ["owner", "rep"]);
         });
         setColMap(nextMap);
@@ -1369,8 +1719,9 @@ function AccountImportWizard({ data, onClose, onApply }) {
   const TEXT_FIELDS = ["territory", "tier", "priority", "status", "cd", "notes",
     "snRep", "snStatus", "snPriority", "snContacts", "snNotes",
     "dtRep", "dtPsm", "dtStatus", "dtPriority", "dtContacts", "dtNotes",
-    "taniumRep", "taniumStatus", "taniumPriority", "taniumContacts", "taniumNotes"];
-  const FLAG_FIELDS = ["flagServiceNow", "flagDynatrace", "flagDtDedicatedProg", "flagTaniumRevList", "flagTaniumPtp", "flagTaniumTarget", "flagGrafana", "flagObservability"];
+    "taniumRep", "taniumStatus", "taniumPriority", "taniumContacts", "taniumNotes",
+    "neubirdRep", "neubirdStatus", "neubirdPriority", "neubirdContacts", "neubirdNotes"];
+  const FLAG_FIELDS = ["flagServiceNow", "flagDynatrace", "flagDtDedicatedProg", "flagTaniumRevList", "flagTaniumPtp", "flagTaniumTarget", "flagGrafana", "flagObservability", "flagNeuBird"];
 
   const buildPatch = (r) => {
     const patch = { name: (r[colMap.name] || "").toString().trim() };
@@ -1382,7 +1733,8 @@ function AccountImportWizard({ data, onClose, onApply }) {
   const diff = useMemo(() => {
     if (step < 3) return null;
     const byName = new Map(data.accounts.map(a => [normName(a.name), a]));
-    let added = 0, updated = 0;
+    const bySfId = new Map(data.accounts.filter(a => a.sfAccountId).map(a => [a.sfAccountId, a]));
+    let added = 0, updated = 0, matchedById = 0;
     const newRepNames = new Set();
     const knownReps = allRepNames(data);
     rows.forEach(r => {
@@ -1390,13 +1742,17 @@ function AccountImportWizard({ data, onClose, onApply }) {
       if (!name) return;
       const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
       if (owner && !knownReps.includes(owner)) newRepNames.add(owner);
-      if (byName.has(normName(name))) updated++; else added++;
+      const sfAccountId = colMap.sfAccountId ? (r[colMap.sfAccountId] || "").toString().trim() : "";
+      if (sfAccountId && bySfId.has(sfAccountId)) { updated++; matchedById++; }
+      else if (byName.has(normName(name))) updated++;
+      else added++;
     });
-    return { added, updated, newRepNames: Array.from(newRepNames), totalRows: rows.length };
+    return { added, updated, matchedById, newRepNames: Array.from(newRepNames), totalRows: rows.length };
   }, [step, rows, colMap, data]);
 
   const commit = () => {
     const byName = new Map(data.accounts.map(a => [normName(a.name), a]));
+    const bySfId = new Map(data.accounts.filter(a => a.sfAccountId).map(a => [a.sfAccountId, a]));
     let accounts = data.accounts.map(a => ({ ...a }));
     let regions = data.regions.map(r => ({ ...r }));
     let teams = data.teams.map(t => ({ ...t, reps: [...t.reps] }));
@@ -1417,8 +1773,10 @@ function AccountImportWizard({ data, onClose, onApply }) {
       if (owner && !knownReps.has(owner)) addUnassignedRep(owner);
       const patch = buildPatch(r);
       if (owner) patch.rep = owner;
+      const sfAccountId = colMap.sfAccountId ? (r[colMap.sfAccountId] || "").toString().trim() : "";
+      if (sfAccountId) patch.sfAccountId = sfAccountId;
 
-      const existing = byName.get(normName(name));
+      const existing = (sfAccountId && bySfId.get(sfAccountId)) || byName.get(normName(name));
       if (existing) {
         const idx = accounts.findIndex(a => a.id === existing.id);
         accounts[idx] = { ...accounts[idx], ...patch };
@@ -1427,10 +1785,11 @@ function AccountImportWizard({ data, onClose, onApply }) {
           id: uid(), name, territory: "", tier: "", priority: "Moderate", status: "Active", cd: "", rep: "", notes: "",
           mdPriority: false, strategic: false, metCustomer: false,
           flagServiceNow: false, flagDynatrace: false, flagDtDedicatedProg: false, flagTaniumRevList: false,
-          flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false,
+          flagTaniumPtp: false, flagTaniumTarget: false, flagGrafana: false, flagObservability: false, flagNeuBird: false,
           snRep: "", snStatus: "", snPriority: "", snContacts: "", snNotes: "",
           dtRep: "", dtPsm: "", dtStatus: "", dtPriority: "", dtContacts: "", dtNotes: "",
           taniumRep: "", taniumStatus: "", taniumPriority: "", taniumContacts: "", taniumNotes: "",
+    neubirdRep: "", neubirdStatus: "", neubirdPriority: "", neubirdContacts: "", neubirdNotes: "",
           createdAt: todayStr(), ...patch,
         });
       }
@@ -1525,6 +1884,9 @@ function AccountImportWizard({ data, onClose, onApply }) {
             </div>
           )}
           <div style={{ fontSize: 11.5, color: C.textMute, marginBottom: 14 }}>
+            {diff.matchedById > 0
+              ? `${diff.matchedById} of those matched by Salesforce Account ID; everything else matched by name. `
+              : "Matching uses Salesforce Account ID when you've mapped that column, falling back to account name. "}
             Only the fields you mapped in step 2 get updated on matching accounts — anything left unmapped (like Notes, if you skip it) stays untouched.
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -1597,7 +1959,8 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
           else if (f.key === "dueDate") nextMap[f.key] = guessField(hdrs, ["due date", "duedate"]);
           else if (f.key === "status") nextMap[f.key] = guessField(hdrs, ["status"]);
           else if (f.key === "sseSme") nextMap[f.key] = guessField(hdrs, ["sse", "sme"]);
-          else if (f.key === "partnerContact") nextMap[f.key] = guessField(hdrs, ["partner contact", "partner"]);
+          else if (f.key === "partnerContact") nextMap[f.key] = guessField(hdrs, ["partner contact", "partner"], ["engaged"]);
+          else if (f.key === "partnerEngaged") nextMap[f.key] = guessField(hdrs, ["partner engaged", "engaged"]);
           else if (f.key === "isOpp") nextMap[f.key] = guessField(hdrs, ["opp"], ["deal reg"]);
           else if (f.key === "dealReg") nextMap[f.key] = guessField(hdrs, ["deal reg"]);
           else if (f.key === "notes") nextMap[f.key] = guessField(hdrs, ["notes", "next steps"]);
@@ -1627,6 +1990,13 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
     if (s === "follow up" || s === "followup") return "Follow Up";
     return "Not Started";
   };
+  const normPartnerEngaged = (v) => {
+    const s = (v || "").toString().trim().toLowerCase();
+    if (["yes", "y", "true", "1"].includes(s)) return "Yes";
+    if (["no", "n", "false", "0"].includes(s)) return "No";
+    if (["na", "n/a", "not applicable"].includes(s)) return "NA";
+    return "";
+  };
 
   const diff = useMemo(() => {
     if (step < 3) return null;
@@ -1649,6 +2019,7 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
   const commit = () => {
     const existingByKey = new Map(data.tasks.map(t => [normName(t.title) + "|" + normName(t.account || ""), t]));
     let tasks = data.tasks.map(t => ({ ...t }));
+    let accounts = data.accounts.map(a => ({ ...a }));
     let regions = data.regions.map(r => ({ ...r }));
     let teams = data.teams.map(t => ({ ...t, reps: [...t.reps] }));
     const knownReps = new Set(allRepNames(data));
@@ -1667,10 +2038,16 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
       const account = colMap.account ? (r[colMap.account] || "").toString().trim() : "";
       const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
       if (owner && !knownReps.has(owner)) addUnassignedRep(owner);
+      let accountId = null;
+      if (account) {
+        const res = findOrCreateAccount(accounts, account);
+        accounts = res.accounts;
+        accountId = res.id;
+      }
 
       const patch = {
         title: name,
-        account,
+        account, accountId,
         cd: colMap.cd ? (r[colMap.cd] || "").toString().trim() : "",
         rep: owner || (teams[0]?.reps[0] || "Unassigned"),
         priority: colMap.priority ? normPriority(r[colMap.priority]) : "Moderate",
@@ -1678,6 +2055,7 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
         status: colMap.status ? normStatus(r[colMap.status]) : "Not Started",
         sseSme: colMap.sseSme ? (r[colMap.sseSme] || "").toString().trim() : "",
         partnerContact: colMap.partnerContact ? (r[colMap.partnerContact] || "").toString().trim() : "",
+        partnerEngaged: colMap.partnerEngaged ? normPartnerEngaged(r[colMap.partnerEngaged]) : "",
         isOpp: colMap.isOpp ? !!(r[colMap.isOpp] && r[colMap.isOpp].toString().trim()) : false,
         dealReg: colMap.dealReg ? (r[colMap.dealReg] || "").toString().trim() : "",
         notes: colMap.notes ? (r[colMap.notes] || "").toString().trim() : "",
@@ -1689,13 +2067,13 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
         const idx = tasks.findIndex(t => t.id === existing.id);
         tasks[idx] = { ...tasks[idx], ...patch, id: tasks[idx].id };
       } else {
-        tasks.push({ id: uid(), ...patch });
+        tasks.push({ id: uid(), oppId: "", ...patch });
       }
     });
 
     onApply({
       ...data,
-      regions, teams, tasks,
+      regions, teams, accounts, tasks,
       taskImportConfig: { colMap, lastImportDate: todayStr(), lastImportFileName: fileName },
     });
   };
@@ -1799,6 +2177,315 @@ function TaskImportWizard({ data, reps, onClose, onApply }) {
   );
 }
 
+// ---------- Opportunity import wizard (general Excel/CSV, not Salesforce) ----------
+function OpportunityImportWizard({ data, reps, onClose, onApply }) {
+  const [step, setStep] = useState(1);
+  const [fileName, setFileName] = useState("");
+  const [headers, setHeaders] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [colMap, setColMap] = useState(data.oppImportConfig?.colMap || {});
+  const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
+
+  const findHeaderRowIdx = (raw) => {
+    for (let i = 0; i < Math.min(raw.length, 6); i++) {
+      if ((raw[i] || []).some(c => String(c).trim().toLowerCase() === "name" || String(c).trim().toLowerCase() === "opportunity name")) return i;
+    }
+    return 0;
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setError("");
+    setFileName(file.name);
+    const isCsv = /\.csv$/i.test(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        let parsedRows = [];
+        if (isCsv) {
+          const raw = Papa.parse(evt.target.result, { skipEmptyLines: false }).data;
+          const headerRowIdx = findHeaderRowIdx(raw);
+          const hdrs = raw[headerRowIdx].map(h => String(h).trim());
+          parsedRows = raw.slice(headerRowIdx + 1).map(r => {
+            const obj = {};
+            hdrs.forEach((h, i) => { obj[h] = r[i] !== undefined ? r[i] : ""; });
+            return obj;
+          });
+        } else {
+          const wb = XLSX.read(evt.target.result, { type: "array", cellDates: false });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const raw = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "", header: 1 });
+          const headerRowIdx = findHeaderRowIdx(raw);
+          const hdrs = raw[headerRowIdx].map(h => String(h).trim());
+          parsedRows = raw.slice(headerRowIdx + 1).map(r => {
+            const obj = {};
+            hdrs.forEach((h, i) => { obj[h] = r[i] !== undefined ? r[i] : ""; });
+            return obj;
+          });
+        }
+        parsedRows = parsedRows.filter(r => Object.values(r).some(v => String(v).trim() !== ""));
+        if (parsedRows.length === 0) { setError("No rows found in that file."); return; }
+        const hdrs = Object.keys(parsedRows[0]);
+        setHeaders(hdrs);
+        setRows(parsedRows);
+
+        const savedMap = data.oppImportConfig?.colMap || {};
+        const nextMap = {};
+        OPP_IMPORT_FIELDS.forEach(f => {
+          if (savedMap[f.key] && hdrs.includes(savedMap[f.key])) { nextMap[f.key] = savedMap[f.key]; return; }
+          if (f.key === "name") nextMap[f.key] = guessField(hdrs, ["opportunity name", "name"], ["account"]);
+          else if (f.key === "account") nextMap[f.key] = guessField(hdrs, ["account"], ["id"]);
+          else if (f.key === "sfOppId") nextMap[f.key] = guessField(hdrs, ["opportunity id", "opportunity  id", "sfdc id", "record id"], ["account"]);
+          else if (f.key === "sfAccountId") nextMap[f.key] = guessField(hdrs, ["account id", "account  id"]);
+          else if (f.key === "stage") nextMap[f.key] = guessField(hdrs, ["stage"]);
+          else if (f.key === "closeDate") nextMap[f.key] = guessField(hdrs, ["close date", "closedate"]);
+          else if (f.key === "owner") nextMap[f.key] = guessField(hdrs, ["owner", "rep"]);
+          else if (f.key === "commissionableMargin") nextMap[f.key] = guessField(hdrs, ["commissionable margin", "commission", "margin", "gross profit", "gp"]);
+          else if (f.key === "source") nextMap[f.key] = guessField(hdrs, ["source"]);
+          else if (f.key === "forecastCategory") nextMap[f.key] = guessField(hdrs, ["forecast"]);
+          else if (f.key === "nextStep") nextMap[f.key] = guessField(hdrs, ["next step"]);
+          else if (f.key === "notes") nextMap[f.key] = guessField(hdrs, ["notes"]);
+        });
+        setColMap(nextMap);
+        setStep(2);
+      } catch (err) {
+        setError("Couldn't read that file. Make sure it's a .csv or .xlsx export.");
+      }
+    };
+    if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+  };
+
+  const requiredMapped = OPP_IMPORT_FIELDS.filter(f => f.required).every(f => colMap[f.key]);
+  const normStage = (v) => {
+    const s = (v || "").toString().trim().toLowerCase();
+    const found = STAGES.find(st => st.toLowerCase() === s);
+    return found || "Prospecting";
+  };
+  const normSource = (v) => {
+    const s = (v || "").toString().trim().toLowerCase();
+    const found = SOURCE_OPTIONS.find(so => so.toLowerCase() === s);
+    return found || "";
+  };
+  const normForecast = (v) => {
+    const s = (v || "").toString().trim().toLowerCase();
+    const found = FORECAST_CATS.find(fc => fc.toLowerCase() === s);
+    return found || "";
+  };
+
+  const diff = useMemo(() => {
+    if (step < 3) return null;
+    const existingByKey = new Map(data.opportunities.map(o => [normName(o.name) + "|" + normName(o.account || ""), o]));
+    const existingBySfId = new Map(data.opportunities.filter(o => o.sfId).map(o => [o.sfId, o]));
+    let added = 0, updated = 0, skipped = 0, matchedById = 0;
+    const newRepNames = new Set();
+    const knownReps = allRepNames(data);
+    rows.forEach(r => {
+      const name = (r[colMap.name] || "").toString().trim();
+      const account = (r[colMap.account] || "").toString().trim();
+      if (!name || !account) { skipped++; return; }
+      const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
+      if (owner && !knownReps.includes(owner)) newRepNames.add(owner);
+      const sfOppId = colMap.sfOppId ? (r[colMap.sfOppId] || "").toString().trim() : "";
+      const existsById = sfOppId && existingBySfId.has(sfOppId);
+      const key = normName(name) + "|" + normName(account);
+      if (existsById) { updated++; matchedById++; }
+      else if (existingByKey.has(key)) updated++;
+      else added++;
+    });
+    return { added, updated, skipped, matchedById, newRepNames: Array.from(newRepNames), totalRows: rows.length };
+  }, [step, rows, colMap, data]);
+
+  const commit = () => {
+    const existingByKey = new Map(data.opportunities.map(o => [normName(o.name) + "|" + normName(o.account || ""), o]));
+    const existingBySfId = new Map(data.opportunities.filter(o => o.sfId).map(o => [o.sfId, o]));
+    const accountsBySfId = new Map(data.accounts.filter(a => a.sfAccountId).map(a => [a.sfAccountId, a]));
+    let opps = data.opportunities.map(o => ({ ...o }));
+    let accounts = data.accounts.map(a => ({ ...a }));
+    let regions = data.regions.map(r => ({ ...r }));
+    let teams = data.teams.map(t => ({ ...t, reps: [...t.reps] }));
+    const knownReps = new Set(allRepNames(data));
+
+    const addUnassignedRep = (name) => {
+      const ensured = ensureUnassignedTeam(regions, teams);
+      regions = ensured.regions; teams = ensured.teams;
+      const ut = teams.find(t => t.id === "unassigned");
+      if (!ut.reps.includes(name)) ut.reps.push(name);
+      knownReps.add(name);
+    };
+
+    rows.forEach(r => {
+      const name = (r[colMap.name] || "").toString().trim();
+      const account = (r[colMap.account] || "").toString().trim();
+      if (!name || !account) return;
+      const owner = colMap.owner ? (r[colMap.owner] || "").toString().trim() : "";
+      if (owner && !knownReps.has(owner)) addUnassignedRep(owner);
+
+      // Resolve the account — prefer a Salesforce Account ID match if we have
+      // one, falling back to name matching (and stamping the id on afterward
+      // so future imports by id "stick" even if this row matched by name).
+      const sfAccountId = colMap.sfAccountId ? (r[colMap.sfAccountId] || "").toString().trim() : "";
+      let accountId;
+      if (sfAccountId && accountsBySfId.has(sfAccountId)) {
+        accountId = accountsBySfId.get(sfAccountId).id;
+      } else {
+        const res = findOrCreateAccount(accounts, account);
+        accounts = res.accounts;
+        accountId = res.id;
+      }
+      if (sfAccountId) {
+        const idx = accounts.findIndex(a => a.id === accountId);
+        if (idx >= 0 && !accounts[idx].sfAccountId) {
+          accounts[idx] = { ...accounts[idx], sfAccountId };
+          accountsBySfId.set(sfAccountId, accounts[idx]);
+        }
+      }
+
+      const stage = colMap.stage ? normStage(r[colMap.stage]) : "Prospecting";
+      const sfOppId = colMap.sfOppId ? (r[colMap.sfOppId] || "").toString().trim() : "";
+
+      const patch = {
+        name, account, accountId, stage,
+        closeDate: colMap.closeDate ? normalizeDate(r[colMap.closeDate]) : "",
+        rep: owner || (teams[0]?.reps[0] || "Unassigned"),
+        commissionableMargin: colMap.commissionableMargin ? numOrZero(r[colMap.commissionableMargin]) : 0,
+        source: colMap.source ? normSource(r[colMap.source]) : "",
+        nextStep: colMap.nextStep ? (r[colMap.nextStep] || "").toString().trim() : "",
+        notes: colMap.notes ? (r[colMap.notes] || "").toString().trim() : "",
+      };
+      if (sfOppId) patch.sfId = sfOppId;
+      const forecastCategory = colMap.forecastCategory ? normForecast(r[colMap.forecastCategory]) : "";
+
+      // Prefer matching by Salesforce Opportunity ID; fall back to name + account.
+      const existing = (sfOppId && existingBySfId.get(sfOppId)) || existingByKey.get(normName(name) + "|" + normName(account));
+      if (existing) {
+        const idx = opps.findIndex(o => o.id === existing.id);
+        const stageChanged = opps[idx].stage !== stage;
+        opps[idx] = {
+          ...opps[idx], ...patch,
+          forecastCategory: forecastCategory || (stageChanged ? suggestForecast(stage) : opps[idx].forecastCategory) || suggestForecast(stage),
+          lastStageChange: stageChanged ? todayStr() : (opps[idx].lastStageChange || todayStr()),
+          id: opps[idx].id,
+        };
+      } else {
+        opps.push({
+          id: uid(), campaignId: "", ...patch,
+          forecastCategory: forecastCategory || suggestForecast(stage),
+          lastStageChange: todayStr(), createdAt: todayStr(),
+        });
+      }
+    });
+
+    onApply({
+      ...data,
+      regions, teams, accounts, opportunities: opps,
+      oppImportConfig: { colMap, lastImportDate: todayStr(), lastImportFileName: fileName },
+    });
+  };
+
+  return (
+    <Modal title="Import opportunities from Excel" wide onClose={onClose}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        {["Upload", "Map columns", "Review"].map((s, i) => (
+          <div key={s} style={{
+            flex: 1, textAlign: "center", fontSize: 11, padding: "6px 4px", borderRadius: 6,
+            background: step === i + 1 ? C.sidebarActiveBg : "transparent",
+            color: step >= i + 1 ? C.sidebarActiveText : C.textMute, fontWeight: 700
+          }}>{i + 1}. {s}</div>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div>
+          <p style={{ fontSize: 13, color: C.textSoft, marginBottom: 16 }}>
+            Upload a spreadsheet of opportunities as .csv or .xlsx. If there's a title row above the real header row, the header row (the one with "Name") is detected automatically. This is separate from the Salesforce sync — use this for a one-off list or a source that isn't Salesforce. Nothing leaves this browser session.
+          </p>
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `1.5px dashed ${C.borderStrong}`, borderRadius: 10, padding: "32px 20px", textAlign: "center",
+              cursor: "pointer", color: C.textSoft
+            }}>
+            <UploadCloud size={22} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>Click to choose a file</div>
+            <div style={{ fontSize: 11.5, marginTop: 4 }}>.csv or .xlsx</div>
+          </div>
+          <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display: "none" }} />
+          {error && <div style={{ color: C.red, fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+          {data.oppImportConfig?.lastImportDate && (
+            <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 14 }}>
+              Last imported {fmtDate(data.oppImportConfig.lastImportDate)} from {data.oppImportConfig.lastImportFileName}.
+            </div>
+          )}
+        </div>
+      )}
+
+      {step === 2 && (
+        <div>
+          <p style={{ fontSize: 12.5, color: C.textSoft, marginBottom: 14 }}>
+            Match each field to a column from <strong style={{ color: C.text }}>{fileName}</strong>. This is remembered for next time.
+          </p>
+          {OPP_IMPORT_FIELDS.map(f => (
+            <div key={f.key} style={{ display: "grid", gridTemplateColumns: "220px 1fr", alignItems: "center", gap: 12, marginBottom: 10 }}>
+              <label style={{ fontSize: 12.5, color: C.textSoft, fontWeight: 600 }}>{f.label}{f.required && <span style={{ color: C.red }}> *</span>}</label>
+              <select style={{ ...inputStyle, marginBottom: 0 }} value={colMap[f.key] || ""} onChange={e => setColMap({ ...colMap, [f.key]: e.target.value })}>
+                <option value="">— Not in file —</option>
+                {headers.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+          ))}
+          <p style={{ fontSize: 11.5, color: C.textMute, marginTop: 4 }}>
+            Stage values match against {STAGES.join(", ")} — anything unrecognized defaults to Prospecting. Source matches Install Base/Prospecting/Partners; Forecast category matches Commit/Gut/Stretch/Not Forecasted — either left blank if unrecognized (forecast category then auto-suggests from stage, same as adding a deal by hand). The two Salesforce ID fields are optional — map them if your export has them and matching will use the ID instead of name + account, which is more reliable across re-imports and Salesforce syncs.
+          </p>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
+            <button style={ghostBtn} onClick={() => setStep(1)}>Back</button>
+            <button style={{ ...primaryBtn, opacity: requiredMapped ? 1 : 0.5 }} disabled={!requiredMapped} onClick={() => setStep(3)}>
+              Continue <ArrowRight size={13} style={{ verticalAlign: -2, marginLeft: 4 }} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && diff && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+            <div style={{ background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: C.green }}>{diff.added}</div>
+              <div style={{ fontSize: 11, color: C.textMute }}>New opportunities</div>
+            </div>
+            <div style={{ background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: C.blue }}>{diff.updated}</div>
+              <div style={{ fontSize: 11, color: C.textMute }}>Updated</div>
+            </div>
+            <div style={{ background: "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: C.amber }}>{diff.skipped}</div>
+              <div style={{ fontSize: 11, color: C.textMute }}>Skipped (missing name/account)</div>
+            </div>
+          </div>
+          {diff.newRepNames.length > 0 && (
+            <div style={{ fontSize: 12, color: C.textSoft, marginBottom: 14 }}>
+              New owner name{diff.newRepNames.length > 1 ? "s" : " "} found: {diff.newRepNames.join(", ")}. They'll be placed on an "Unassigned" team — reassign them under Settings.
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: C.textMute, marginBottom: 14 }}>
+            {diff.matchedById > 0
+              ? `${diff.matchedById} of those matched by Salesforce Opportunity ID; everything else matched by opportunity name + account. `
+              : "Matching uses Salesforce Opportunity ID when you've mapped that column, falling back to opportunity name + account. "}
+            Accounts match by Salesforce Account ID when mapped, otherwise by name — either way, accounts that don't already exist are created automatically.
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <button style={ghostBtn} onClick={() => setStep(2)}>Back</button>
+            <button style={primaryBtn} onClick={commit}>
+              <Check size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Apply import
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ---------- Shared visual bits ----------
 function Card({ children, style }) {
   return <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, ...style }}>{children}</div>;
@@ -1881,7 +2568,7 @@ const NAV = [
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
-// build refresh marker
+// build refresh marker 2
 export default function SalesCommandCenter() {
   const { data, setData, loaded, saving, lastSyncedAt, loadError, retryLoad } = useStore();
   const [tab, setTab] = useState("dashboard");
@@ -1895,21 +2582,22 @@ export default function SalesCommandCenter() {
   const [forecastPeriodValue, setForecastPeriodValue] = useState(currentQuarter());
 
   const [oppModal, setOppModal] = useState(null);
-  const [actModal, setActModal] = useState(null);
   const [taskModal, setTaskModal] = useState(null);
   const [goalModal, setGoalModal] = useState(null);
+  const [campModal, setCampModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [accountImportOpen, setAccountImportOpen] = useState(false);
   const [taskImportOpen, setTaskImportOpen] = useState(false);
+  const [oppImportOpen, setOppImportOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState("Active");
   const [taskGroupBy, setTaskGroupBy] = useState("account");
   const [taskSearch, setTaskSearch] = useState("");
   const [taskFieldFilters, setTaskFieldFilters] = useState({
-    priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All",
+    priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", partnerEngaged: "All", isOpp: "All", dealReg: "All", due: "All",
   });
   const setTaskFieldFilter = (key, val) => setTaskFieldFilters(prev => ({ ...prev, [key]: val }));
-  const clearTaskFieldFilters = () => { setTaskFilter("Active"); setTaskSearch(""); setTaskFieldFilters({ priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", isOpp: "All", dealReg: "All", due: "All" }); };
+  const clearTaskFieldFilters = () => { setTaskFilter("Active"); setTaskSearch(""); setTaskFieldFilters({ priority: "All", account: "All", cd: "All", owner: "All", sseSme: "All", partnerContact: "All", partnerEngaged: "All", isOpp: "All", dealReg: "All", due: "All" }); };
   const [accountFilter, setAccountFilter] = useState("All");
   const [accountGroupBy, setAccountGroupBy] = useState("none");
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
@@ -1920,6 +2608,12 @@ export default function SalesCommandCenter() {
   });
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   const toggleTaskExpand = (id) => setExpandedTasks(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const [expandedOpps, setExpandedOpps] = useState(new Set());
+  const toggleOppExpand = (id) => setExpandedOpps(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
@@ -1966,11 +2660,12 @@ export default function SalesCommandCenter() {
     data.accounts.filter(a => fullOrgScope || repScope.includes(a.rep)), [data.accounts, repScope, fullOrgScope]);
 
   const accountComputed = useCallback((acc) => {
-    const key = normName(acc.name);
-    const hasActiveOpp = data.opportunities.some(o => normName(o.account) === key && OPEN_STAGES.includes(o.stage) && o.sfStatus !== "removed");
-    const hasMet = data.activities.some(a => normName(a.account) === key && (a.type === "Meeting" || a.type === "Demo"));
+    const hasActiveOpp = data.opportunities.some(o =>
+      (o.accountId ? o.accountId === acc.id : normName(o.account) === normName(acc.name)) && OPEN_STAGES.includes(o.stage) && o.sfStatus !== "removed"
+    );
+    const hasMet = !!acc.metCustomer;
     return { hasActiveOpp, hasMet };
-  }, [data.opportunities, data.activities]);
+  }, [data.opportunities]);
 
   const periodOpts = useMemo(() => quarterOptions(data), [data]);
 
@@ -1982,6 +2677,43 @@ export default function SalesCommandCenter() {
   };
   const remove = (listKey, id) => {
     setData({ ...data, [listKey]: data[listKey].filter(x => x.id !== id) });
+  };
+
+  // Resolve an item's account link before saving: if it points at a real
+  // account, keep the display name in sync (self-heals renames); if it's a
+  // freshly-typed name with no id yet, create the account record now.
+  const resolveAccountLink = (item, accountsList) => {
+    let accounts = accountsList;
+    let accountId = item.accountId || null;
+    let accountName = (item.account || "").trim();
+    if (accountId) {
+      const existing = accounts.find(a => a.id === accountId);
+      if (existing) accountName = existing.name;
+      else accountId = null; // linked account was deleted; fall through to re-resolve by name
+    }
+    if (!accountId && accountName) {
+      const res = findOrCreateAccount(accounts, accountName);
+      accounts = res.accounts;
+      accountId = res.id;
+      accountName = res.name;
+    }
+    return { accounts, item: { ...item, account: accountName, accountId } };
+  };
+
+  const saveOpportunity = (item) => {
+    const { accounts, item: resolved } = resolveAccountLink(item, data.accounts);
+    const opportunities = data.opportunities.some(o => o.id === resolved.id)
+      ? data.opportunities.map(o => o.id === resolved.id ? resolved : o)
+      : [...data.opportunities, resolved];
+    setData({ ...data, accounts, opportunities });
+  };
+
+  const saveTask = (item) => {
+    const { accounts, item: resolved } = resolveAccountLink(item, data.accounts);
+    const tasks = data.tasks.some(t => t.id === resolved.id)
+      ? data.tasks.map(t => t.id === resolved.id ? resolved : t)
+      : [...data.tasks, resolved];
+    setData({ ...data, accounts, tasks });
   };
 
   const exportBackup = () => {
@@ -2038,10 +2770,6 @@ export default function SalesCommandCenter() {
     .reduce((s, g) => s + CATEGORIES.reduce((cs, c) => cs + (Number(g[c.key + "Target"]) || 0), 0), 0);
   const ytdWon = filteredOpps.filter(o => o.stage === "Closed Won" && o.closeDate && o.closeDate.slice(0, 4) === String(ytdYear));
   const ytdActual = ytdWon.reduce((s, o) => s + oppTotal(o), 0);
-  const ytdByCategory = CATEGORIES.reduce((acc, c) => {
-    acc[c.key] = ytdWon.reduce((s, o) => s + (Number(o[c.key]) || 0), 0);
-    return acc;
-  }, {});
   const goalRemaining = Math.max(annualGoal - ytdActual, 0);
   const pctToGoal = annualGoal > 0 ? (ytdActual / annualGoal) * 100 : 0;
   const startOfYear = new Date(ytdYear, 0, 1), endOfYear = new Date(ytdYear, 11, 31);
@@ -2061,14 +2789,14 @@ export default function SalesCommandCenter() {
   // ---- Forecast ----
   const qLabel = currentQuarter();
   const qOpen = openOpps.filter(o => getQuarter(o.closeDate) === qLabel);
-  const qCommit = qOpen.filter(o => (o.forecastCategory || "Pipeline") === "Commit");
-  const qStretch = qOpen.filter(o => (o.forecastCategory || "Pipeline") === "Stretch");
+  const qCommit = qOpen.filter(o => (o.forecastCategory || "Not Forecasted") === "Commit");
+  const qStretch = qOpen.filter(o => (o.forecastCategory || "Not Forecasted") === "Stretch");
   const qForecastValue = qCommit.reduce((s, o) => s + oppTotal(o), 0) + (includeStretchQ ? qStretch.reduce((s, o) => s + oppTotal(o), 0) : 0);
   const qForecastCount = qCommit.length + (includeStretchQ ? qStretch.length : 0);
 
   const fyOpen = openOpps.filter(o => o.closeDate && o.closeDate.slice(0, 4) === String(ytdYear));
-  const fyCommit = fyOpen.filter(o => (o.forecastCategory || "Pipeline") === "Commit");
-  const fyStretch = fyOpen.filter(o => (o.forecastCategory || "Pipeline") === "Stretch");
+  const fyCommit = fyOpen.filter(o => (o.forecastCategory || "Not Forecasted") === "Commit");
+  const fyStretch = fyOpen.filter(o => (o.forecastCategory || "Not Forecasted") === "Stretch");
   const fyForecastValue = fyCommit.reduce((s, o) => s + oppTotal(o), 0) + (includeStretchFY ? fyStretch.reduce((s, o) => s + oppTotal(o), 0) : 0);
   const fyForecastCount = fyCommit.length + (includeStretchFY ? fyStretch.length : 0);
 
@@ -2081,8 +2809,8 @@ export default function SalesCommandCenter() {
 
   const monthlyData = months.map(m => {
     const inMonth = openOpps.filter(o => o.closeDate && o.closeDate.slice(0, 7) === m.key);
-    const commit = inMonth.filter(o => (o.forecastCategory || "Pipeline") === "Commit");
-    const stretch = inMonth.filter(o => (o.forecastCategory || "Pipeline") === "Stretch");
+    const commit = inMonth.filter(o => (o.forecastCategory || "Not Forecasted") === "Commit");
+    const stretch = inMonth.filter(o => (o.forecastCategory || "Not Forecasted") === "Stretch");
     return {
       ...m,
       commitSum: commit.reduce((s, o) => s + oppTotal(o), 0), commitCount: commit.length,
@@ -2142,6 +2870,7 @@ export default function SalesCommandCenter() {
       if (accountFilter === "ServiceNow") return !!a.flagServiceNow || !!a.snStatus;
       if (accountFilter === "Dynatrace") return !!a.flagDynatrace || !!a.dtStatus;
       if (accountFilter === "Tanium") return !!a.flagTaniumRevList || !!a.flagTaniumPtp || !!a.flagTaniumTarget || !!a.taniumStatus;
+      if (accountFilter === "NeuBird AI") return !!a.flagNeuBird || !!a.neubirdStatus;
       if (accountFilter === "Active opportunity") return c.hasActiveOpp;
       if (accountFilter === "Never met") return !c.hasMet;
       return true;
@@ -2208,12 +2937,40 @@ export default function SalesCommandCenter() {
         {expanded && (
           <div style={{ padding: "16px 16px 20px 46px", borderBottom: `1px solid ${C.border}`, background: "#FAFBFC" }}>
             {(() => {
-              const acctTasks = data.tasks.filter(t => normName(t.account) === normName(a.name));
+              const acctOpps = data.opportunities.filter(o => o.accountId ? o.accountId === a.id : normName(o.account) === normName(a.name));
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3 }}>Opportunities ({acctOpps.length})</div>
+                    <button style={{ ...ghostBtn, padding: "4px 9px", fontSize: 11.5 }} onClick={(e) => { e.stopPropagation(); setOppModal({ accountId: a.id, account: a.name }); }}>
+                      <Plus size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Add opportunity
+                    </button>
+                  </div>
+                  <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+                    {acctOpps.length === 0 ? (
+                      <div style={{ padding: "10px 12px", fontSize: 12.5, color: C.textMute, background: C.card }}>No opportunities linked to this account yet.</div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <div style={{ minWidth: 860 }}>
+                          {oppTableHeader}
+                          {acctOpps
+                            .sort((x, y) => (x.closeDate || "9999").localeCompare(y.closeDate || "9999"))
+                            .map(o => renderOpportunityRow(o))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {(() => {
+              const acctTasks = data.tasks.filter(t => t.accountId ? t.accountId === a.id : normName(t.account) === normName(a.name));
               return (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3 }}>Tasks ({acctTasks.length})</div>
-                    <button style={{ ...ghostBtn, padding: "4px 9px", fontSize: 11.5 }} onClick={(e) => { e.stopPropagation(); setTaskModal({ account: a.name }); }}>
+                    <button style={{ ...ghostBtn, padding: "4px 9px", fontSize: 11.5 }} onClick={(e) => { e.stopPropagation(); setTaskModal({ accountId: a.id, account: a.name }); }}>
                       <Plus size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Add task
                     </button>
                   </div>
@@ -2228,6 +2985,23 @@ export default function SalesCommandCenter() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {(() => {
+              const acctCampaigns = data.campaigns.filter(c => c.accountIds.includes(a.id));
+              if (acctCampaigns.length === 0) return null;
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 6 }}>Campaigns ({acctCampaigns.length})</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {acctCampaigns.map(c => (
+                      <span key={c.id} onClick={(e) => { e.stopPropagation(); setCampModal(c); }} style={{ cursor: "pointer", display: "inline-flex" }}>
+                        <Pill color={CAMPAIGN_STATUS_COLOR[c.status]} bg={CAMPAIGN_STATUS_BG[c.status]}>{c.name}</Pill>
+                      </span>
+                    ))}
                   </div>
                 </div>
               );
@@ -2257,6 +3031,7 @@ export default function SalesCommandCenter() {
                 { label: "ServiceNow", color: "#16A34A", bg: "#F0FDF4", rep: a.snRep, status: a.snStatus, priority: a.snPriority, contacts: a.snContacts, notes: a.snNotes },
                 { label: "Dynatrace", color: "#3B82F6", bg: "#EFF6FF", rep: a.dtRep, psm: a.dtPsm, status: a.dtStatus, priority: a.dtPriority, contacts: a.dtContacts, notes: a.dtNotes },
                 { label: "Tanium", color: "#DC2626", bg: "#FEF2F2", rep: a.taniumRep, status: a.taniumStatus, priority: a.taniumPriority, contacts: a.taniumContacts, notes: a.taniumNotes },
+                { label: "NeuBird AI", color: BURNT_ORANGE, bg: "#FFF3EA", rep: a.neubirdRep, status: a.neubirdStatus, priority: a.neubirdPriority, contacts: a.neubirdContacts, notes: a.neubirdNotes },
               ].map(v => (
                 <div key={v.label} style={{ background: v.bg, border: `1px solid ${v.color}33`, borderRadius: 8, padding: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: v.color, marginBottom: 10 }}>{v.label}</div>
@@ -2299,33 +3074,36 @@ export default function SalesCommandCenter() {
 
   const taskTableHeader = (
     <div style={{
-      display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr 1.6fr",
-      padding: "8px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4,
+      display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr",
+      padding: "10px 16px", fontSize: 10.5, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.5,
       borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
     }}>
-      <span></span><span>Name</span><span>Account</span><span>CD</span><span>Owner</span><span>Priority</span><span>Due date</span><span>Status</span><span>Notes</span>
+      <span></span><span>Name</span><span>Account</span><span>CD</span><span>Owner</span><span>Priority</span><span>Due date</span><span>Status</span>
     </div>
   );
 
   const renderTaskRow = (t) => {
     const expanded = expandedTasks.has(t.id);
     const overdue = t.status !== "Done" && t.dueDate && daysUntil(t.dueDate) < 0;
+    const rowAccent = PRIORITY_COLOR[t.priority] || C.textMute;
+    const hasNotes = !!(t.notes && t.notes.trim());
     return (
       <div key={t.id}>
         <div onClick={() => toggleTaskExpand(t.id)} style={{
-          display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr 1.6fr",
-          padding: "11px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center", gap: 6, background: "#FAFBFC"
+          display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr",
+          padding: "13px 16px", borderBottom: hasNotes ? "none" : `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
+          cursor: "pointer", alignItems: "center", gap: 6, background: C.card, transition: "background 0.1s ease"
         }}>
           <ChevronRight size={14} color={C.textMute} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s ease" }} />
           <span style={{
-            fontSize: 13, fontWeight: 500, color: t.status === "Done" ? C.textMute : C.text,
+            fontSize: 13.5, fontWeight: 600, color: t.status === "Done" ? C.textMute : C.text,
             textDecoration: t.status === "Done" ? "line-through" : "none"
           }}>{t.title}</span>
-          <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.account || "—"}</span>
-          <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.cd || "—"}</span>
-          <span style={{ fontSize: 12.5, color: C.textSoft }}>{t.rep || "—"}</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.account || "—"}</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.cd || "—"}</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.rep || "—"}</span>
           <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
-          <span style={{ fontSize: 12.5, color: overdue ? C.red : C.textSoft, fontWeight: overdue ? 700 : 400 }}>{fmtDate(t.dueDate)}</span>
+          <span style={{ fontSize: 13, color: overdue ? C.red : C.text, fontWeight: overdue ? 700 : 500 }}>{fmtDate(t.dueDate)}</span>
           <span onClick={e => e.stopPropagation()}>
             <select
               value={t.status}
@@ -2338,36 +3116,139 @@ export default function SalesCommandCenter() {
               {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </span>
-          <span style={{ fontSize: 12, color: C.textMute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.notes || "—"}</span>
         </div>
+        {hasNotes && (
+          <div onClick={() => toggleTaskExpand(t.id)} style={{
+            padding: "0 16px 12px 42px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
+            background: C.card, cursor: "pointer"
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginRight: 6 }}>Notes</span>
+            <span style={{ fontSize: 12.5, fontWeight: 400, color: C.textSoft, whiteSpace: "pre-wrap" }}>{t.notes}</span>
+          </div>
+        )}
         {expanded && (
-          <div style={{ padding: "14px 16px 16px 40px", borderBottom: `1px solid ${C.border}`, background: "#FAFBFC" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, flex: 1 }}>
+          <div style={{ padding: "16px 16px 18px 40px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`, background: "#F8FAFC" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 14, flex: 1 }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>SSE / SME</div>
-                  <div style={{ fontSize: 12.5, color: C.text }}>{t.sseSme || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>SSE / SME</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.sseSme || "—"}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Partner Contact</div>
-                  <div style={{ fontSize: 12.5, color: C.text }}>{t.partnerContact || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Partner Contact</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.partnerContact || "—"}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Opp</div>
-                  <div>{t.isOpp ? <Pill color={C.blue} bg="#DBEAFE">Opp</Pill> : <span style={{ color: C.textMute, fontSize: 12.5 }}>—</span>}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Partner Engaged</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.partnerEngaged || "—"}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Deal Reg?</div>
-                  <div style={{ fontSize: 12.5, color: C.text }}>{t.dealReg || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Opportunity</div>
+                  <div>
+                    {(() => {
+                      const linkedOpp = t.oppId ? data.opportunities.find(o => o.id === t.oppId) : null;
+                      if (linkedOpp) {
+                        return (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setOppModal(linkedOpp); }}
+                            style={{ color: C.blue, fontWeight: 600, fontSize: 13, cursor: "pointer", textDecoration: "underline" }}
+                            title="Open this opportunity"
+                          >
+                            {linkedOpp.name}
+                          </span>
+                        );
+                      }
+                      if (t.isOpp) return <Pill color={C.blue} bg="#DBEAFE">Opp</Pill>;
+                      return <span style={{ color: C.textMute, fontSize: 13, fontWeight: 500 }}>—</span>;
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Deal Reg?</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.dealReg || "—"}</div>
                 </div>
               </div>
-              <button style={{ ...ghostBtn, padding: "5px 10px", fontSize: 11.5, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setTaskModal(t); }}>
-                <Pencil size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Edit full details
+              <button style={{ ...ghostBtn, padding: "6px 12px", fontSize: 12, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setTaskModal(t); }}>
+                <Pencil size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Edit full details
               </button>
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 }}>Notes / Next steps</div>
-              <div style={{ fontSize: 12.5, color: C.text, whiteSpace: "pre-wrap" }}>{t.notes || "—"}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Notes / Next steps</div>
+              <div style={{ fontSize: 13, fontWeight: 400, color: C.text, whiteSpace: "pre-wrap" }}>{t.notes || "—"}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const oppTableHeader = (
+    <div style={{
+      display: "grid", gridTemplateColumns: "20px 2fr 0.9fr 1fr 0.9fr 0.8fr",
+      padding: "10px 16px", fontSize: 10.5, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.5,
+      borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
+    }}>
+      <span></span><span>Name</span><span>Stage</span><span>Commissionable Margin</span><span>Close date</span><span>Forecast</span>
+    </div>
+  );
+
+  const renderOpportunityRow = (o) => {
+    const expanded = expandedOpps.has(o.id);
+    const overdue = o.closeDate && daysUntil(o.closeDate) < 0 && OPEN_STAGES.includes(o.stage);
+    const rowAccent = STAGE_COLOR[o.stage] || C.textMute;
+    const linkedCampaign = o.campaignId ? data.campaigns.find(c => c.id === o.campaignId) : null;
+    return (
+      <div key={o.id}>
+        <div onClick={() => toggleOppExpand(o.id)} style={{
+          display: "grid", gridTemplateColumns: "20px 2fr 0.9fr 1fr 0.9fr 0.8fr",
+          padding: "13px 16px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
+          cursor: "pointer", alignItems: "center", gap: 6, background: C.card, opacity: o.sfStatus === "removed" ? 0.55 : 1
+        }}>
+          <ChevronRight size={14} color={C.textMute} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s ease" }} />
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
+            {o.name}{o.sfId && <FileSpreadsheet size={11} color={C.textMute} />}
+          </span>
+          <span>
+            {o.sfStatus === "removed"
+              ? <Pill color={C.amber} bg={C.amberBg}>Removed</Pill>
+              : <Pill color={STAGE_COLOR[o.stage]} bg={STAGE_COLOR[o.stage] + "1A"}>{o.stage}</Pill>}
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtMoneyShort(oppTotal(o))}</span>
+          <span style={{ fontSize: 13, color: overdue ? C.red : C.text, fontWeight: overdue ? 700 : 500 }}>{fmtDate(o.closeDate)}</span>
+          <span>{OPEN_STAGES.includes(o.stage) && <Pill color={FORECAST_COLOR[o.forecastCategory || "Not Forecasted"]} bg={FORECAST_COLOR[o.forecastCategory || "Not Forecasted"] + "1A"}>{o.forecastCategory || "Not Forecasted"}</Pill>}</span>
+        </div>
+        {expanded && (
+          <div style={{ padding: "16px 16px 18px 40px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`, background: "#F8FAFC" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, flex: 1 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Owner</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{o.rep || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Total value</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{fmtMoneyShort(oppTotal(o))}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Campaign</div>
+                  <div>
+                    {linkedCampaign
+                      ? <span onClick={(e) => { e.stopPropagation(); setCampModal(linkedCampaign); }} style={{ color: C.blue, fontWeight: 600, fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>{linkedCampaign.name}</span>
+                      : <span style={{ color: C.textMute, fontSize: 13, fontWeight: 500 }}>—</span>}
+                  </div>
+                </div>
+              </div>
+              <button style={{ ...ghostBtn, padding: "6px 12px", fontSize: 12, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setOppModal(o); }}>
+                <Pencil size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Edit full details
+              </button>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Next step</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{o.nextStep || "—"}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Notes</div>
+              <div style={{ fontSize: 13, fontWeight: 400, color: C.text, whiteSpace: "pre-wrap" }}>{o.notes || "—"}</div>
             </div>
           </div>
         )}
@@ -2420,7 +3301,7 @@ export default function SalesCommandCenter() {
   const openOppsInForecastPeriod = openOpps.filter(inForecastPeriod);
 
   const forecastGroups = FORECAST_CATS.map(cat => {
-    const opps = openOppsInForecastPeriod.filter(o => (o.forecastCategory || "Pipeline") === cat).sort((a, b) => (a.closeDate || "9999").localeCompare(b.closeDate || "9999"));
+    const opps = openOppsInForecastPeriod.filter(o => (o.forecastCategory || "Not Forecasted") === cat).sort((a, b) => (a.closeDate || "9999").localeCompare(b.closeDate || "9999"));
     return { key: cat, label: cat, color: FORECAST_COLOR[cat], opps, sum: opps.reduce((s, o) => s + oppTotal(o), 0) };
   });
 
@@ -2444,6 +3325,7 @@ export default function SalesCommandCenter() {
     .filter(t => taskFieldFilters.owner === "All" || t.rep === taskFieldFilters.owner)
     .filter(t => taskFieldFilters.sseSme === "All" || (t.sseSme || "") === taskFieldFilters.sseSme)
     .filter(t => taskFieldFilters.partnerContact === "All" || (t.partnerContact || "") === taskFieldFilters.partnerContact)
+    .filter(t => taskFieldFilters.partnerEngaged === "All" || (t.partnerEngaged || "") === taskFieldFilters.partnerEngaged)
     .filter(t => taskFieldFilters.dealReg === "All" || (t.dealReg || "") === taskFieldFilters.dealReg)
     .filter(t => taskFieldFilters.isOpp === "All" ? true : taskFieldFilters.isOpp === "Yes" ? !!t.isOpp : !t.isOpp)
     .filter(t => {
@@ -2661,34 +3543,6 @@ export default function SalesCommandCenter() {
                   icon={staleOpps.length === 0 ? <CheckCircle2 size={16} color={C.green} /> : <AlertCircle size={16} color={C.red} />} />
               </div>
 
-              {/* YTD margin breakdown */}
-              <Card style={{ marginBottom: 16 }}>
-                <h4 style={{ margin: "0 0 12px", fontSize: 12.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textSoft }}>YTD margin breakdown</h4>
-                <div style={{ display: "flex", height: 40, borderRadius: 8, overflow: "hidden", gap: 2, marginBottom: 8 }}>
-                  {CATEGORIES.map(c => {
-                    const val = ytdByCategory[c.key];
-                    const pct = ytdActual > 0 ? (val / ytdActual) * 100 : 100 / CATEGORIES.length;
-                    return (
-                      <div key={c.key} style={{ width: `${pct}%`, background: c.color, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#fff", fontSize: 10, minWidth: 60 }}>
-                        <span style={{ fontWeight: 700, fontSize: 10, textTransform: "uppercase", opacity: 0.85 }}>{c.label}</span>
-                        <span style={{ fontWeight: 700 }}>{fmtMoneyShort(val)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.textMute, marginBottom: 6 }}>
-                  <span>0%</span><span>50%</span><span>100%</span>
-                </div>
-                <div style={{ display: "flex", gap: 16, fontSize: 12, color: C.textSoft }}>
-                  {CATEGORIES.map(c => (
-                    <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 2, background: c.color, display: "inline-block" }} />
-                      {c.label} {fmtMoneyShort(ytdByCategory[c.key])} ({ytdActual > 0 ? ((ytdByCategory[c.key] / ytdActual) * 100).toFixed(1) : "0.0"}%)
-                    </span>
-                  ))}
-                </div>
-              </Card>
-
               {/* Pipeline margin + coverage */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
                 <Card>
@@ -2839,7 +3693,10 @@ export default function SalesCommandCenter() {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Revenue by stage</h4>
-                <button style={primaryBtn} onClick={() => setOppModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />Add opportunity</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={ghostBtn} onClick={() => setOppImportOpen(true)}><UploadCloud size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Import from Excel</button>
+                  <button style={primaryBtn} onClick={() => setOppModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />Add opportunity</button>
+                </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 22 }}>
                 {allStageSummary.map(g => (
@@ -2865,12 +3722,12 @@ export default function SalesCommandCenter() {
                     <span style={{ fontSize: 11.5, color: C.textMute }}>{g.opps.length} {g.opps.length === 1 ? "deal" : "deals"} · {fmtMoneyShort(g.sum)}</span>
                   </div>
                   <Card style={{ padding: 0, overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.7fr", padding: "9px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
-                      <span>Opportunity</span><span>Account</span><span>Product</span><span>Services</span><span>Managed</span><span>Close date</span><span>Forecast</span>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 0.8fr 0.8fr", padding: "9px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
+                      <span>Opportunity</span><span>Account</span><span>Commissionable Margin</span><span>Close date</span><span>Forecast</span>
                     </div>
                     {g.opps.map(o => (
                       <div key={o.id} onClick={() => setOppModal(o)} style={{
-                        display: "grid", gridTemplateColumns: "1.8fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.7fr", padding: "11px 16px",
+                        display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 0.8fr 0.8fr", padding: "11px 16px",
                         fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center",
                         opacity: o.sfStatus === "removed" ? 0.55 : 1
                       }}>
@@ -2878,11 +3735,9 @@ export default function SalesCommandCenter() {
                           {o.name}{o.sfId && <FileSpreadsheet size={11} color={C.textMute} />}
                         </span>
                         <span style={{ color: C.textSoft }}>{o.account}</span>
-                        <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(o.productMargin)}</span>
-                        <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(o.servicesMargin)}</span>
-                        <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(o.managedServices)}</span>
+                        <span style={{ color: C.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(oppTotal(o))}</span>
                         <span style={{ color: o.closeDate && daysUntil(o.closeDate) < 0 && OPEN_STAGES.includes(o.stage) ? C.red : C.textSoft }}>{fmtDate(o.closeDate)}</span>
-                        <span>{OPEN_STAGES.includes(o.stage) && <Pill color={FORECAST_COLOR[o.forecastCategory || "Pipeline"]} bg={FORECAST_COLOR[o.forecastCategory || "Pipeline"] + "1A"}>{o.forecastCategory || "Pipeline"}</Pill>}</span>
+                        <span>{OPEN_STAGES.includes(o.stage) && <Pill color={FORECAST_COLOR[o.forecastCategory || "Not Forecasted"]} bg={FORECAST_COLOR[o.forecastCategory || "Not Forecasted"] + "1A"}>{o.forecastCategory || "Not Forecasted"}</Pill>}</span>
                       </div>
                     ))}
                   </Card>
@@ -2936,12 +3791,12 @@ export default function SalesCommandCenter() {
                     <span style={{ fontSize: 11.5, color: C.textMute }}>{g.opps.length} {g.opps.length === 1 ? "deal" : "deals"} · {fmtMoneyShort(g.sum)}</span>
                   </div>
                   <Card style={{ padding: 0, overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr", padding: "9px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
-                      <span>Opportunity</span><span>Account</span><span>Stage</span><span>Product</span><span>Services</span><span>Managed</span><span>Close date</span>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 0.9fr 1fr 0.8fr", padding: "9px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
+                      <span>Opportunity</span><span>Account</span><span>Stage</span><span>Commissionable Margin</span><span>Close date</span>
                     </div>
                     {g.opps.map(o => (
                       <div key={o.id} onClick={() => setOppModal(o)} style={{
-                        display: "grid", gridTemplateColumns: "1.8fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr", padding: "11px 16px",
+                        display: "grid", gridTemplateColumns: "2fr 1.3fr 0.9fr 1fr 0.8fr", padding: "11px 16px",
                         fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center"
                       }}>
                         <span style={{ color: C.text, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
@@ -2949,9 +3804,7 @@ export default function SalesCommandCenter() {
                         </span>
                         <span style={{ color: C.textSoft }}>{o.account}</span>
                         <span><Pill color={STAGE_COLOR[o.stage]} bg={STAGE_COLOR[o.stage] + "1A"}>{o.stage}</Pill></span>
-                        <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(o.productMargin)}</span>
-                        <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(o.servicesMargin)}</span>
-                        <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(o.managedServices)}</span>
+                        <span style={{ color: C.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(oppTotal(o))}</span>
                         <span style={{ color: o.closeDate && daysUntil(o.closeDate) < 0 ? C.red : C.textSoft }}>{fmtDate(o.closeDate)}</span>
                       </div>
                     ))}
@@ -2966,7 +3819,7 @@ export default function SalesCommandCenter() {
 
           {tab === "accounts" && (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12, marginBottom: 16 }}>
                 {[
                   { label: "Total accounts", value: filteredAccounts.length, color: C.text },
                   { label: "Active", value: filteredAccounts.filter(a => a.status === "Active").length, color: C.green },
@@ -2974,6 +3827,7 @@ export default function SalesCommandCenter() {
                   { label: "ServiceNow customers", value: filteredAccounts.filter(a => a.snStatus === "Customer").length, color: C.blue },
                   { label: "Dynatrace customers", value: filteredAccounts.filter(a => a.dtStatus === "Customer").length, color: C.purple },
                   { label: "Tanium customers", value: filteredAccounts.filter(a => a.taniumStatus === "Customer").length, color: C.amber },
+                  { label: "NeuBird customers", value: filteredAccounts.filter(a => a.neubirdStatus === "Customer").length, color: BURNT_ORANGE },
                 ].map(s => (
                   <Card key={s.label} style={{ padding: "12px 14px" }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>{s.label}</div>
@@ -2984,7 +3838,7 @@ export default function SalesCommandCenter() {
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {["All", "Active", "High priority", "ServiceNow", "Dynatrace", "Tanium", "Active opportunity", "Never met"].map(s => (
+                  {["All", "Active", "High priority", "ServiceNow", "Dynatrace", "Tanium", "NeuBird AI", "Active opportunity", "Never met"].map(s => (
                     <div key={s} onClick={() => setAccountFilter(s)} style={{
                       fontSize: 12, padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 600,
                       background: accountFilter === s ? C.sidebarActiveBg : C.card,
@@ -3135,31 +3989,153 @@ export default function SalesCommandCenter() {
 
           {tab === "prospecting" && (
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Prospecting activity log</h4>
-                <button style={primaryBtn} onClick={() => setActModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />Log activity</button>
-              </div>
-              <Card style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "0.8fr 0.8fr 1.2fr 1fr 1fr 1.6fr", padding: "10px 16px", fontSize: 11, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
-                  <span>Date</span><span>Type</span><span>Account</span><span>Contact</span><span>Rep</span><span>Notes</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Campaigns</h4>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textMute }}>What your BDR is running, at which accounts, and what it's produced.</p>
                 </div>
-                {data.activities.filter(a => repScope.includes(a.rep)).slice().sort((a, b) => b.date.localeCompare(a.date)).map(a => (
-                  <div key={a.id} onClick={() => setActModal(a)} style={{
-                    display: "grid", gridTemplateColumns: "0.8fr 0.8fr 1.2fr 1fr 1fr 1.6fr", padding: "12px 16px",
-                    fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", color: C.textSoft, alignItems: "center"
-                  }}>
-                    <span>{fmtDate(a.date)}</span>
-                    <span><Pill color={C.blue} bg="#DBEAFE">{a.type}</Pill></span>
-                    <span style={{ color: C.text }}>{a.account}</span>
-                    <span>{a.contact || "—"}</span>
-                    <span>{a.rep}</span>
-                    <span style={{ color: C.textMute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.notes}</span>
-                  </div>
-                ))}
-                {data.activities.length === 0 && (
-                  <div style={{ padding: 30, textAlign: "center", color: C.textMute, fontSize: 13 }}>No activity logged yet.</div>
-                )}
-              </Card>
+                <button style={primaryBtn} onClick={() => setCampModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New campaign</button>
+              </div>
+
+              {data.campaigns.length === 0 && (
+                <Card style={{ padding: 30, textAlign: "center", color: C.textMute, fontSize: 13, marginBottom: 24 }}>
+                  No campaigns yet. Create one to start tracking what's being run where — and which accounts turn into real pipeline.
+                </Card>
+              )}
+
+              {data.campaigns.slice().sort((a, b) => (b.startDate || "").localeCompare(a.startDate || "")).map(c => {
+                const attributed = data.opportunities.filter(o => o.campaignId === c.id);
+                const won = attributed.filter(o => o.stage === "Closed Won");
+                const totalValue = attributed.reduce((s, o) => s + oppTotal(o), 0);
+                const accountsHit = new Set(attributed.map(o => o.accountId)).size;
+                return (
+                  <Card key={c.id} onClick={() => setCampModal(c)} style={{ padding: "16px 18px", marginBottom: 12, cursor: "pointer" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{c.name}</span>
+                          <Pill color={CAMPAIGN_STATUS_COLOR[c.status]} bg={CAMPAIGN_STATUS_BG[c.status]}>{c.status}</Pill>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 3 }}>
+                          {c.bdr ? `BDR: ${c.bdr}` : "No BDR assigned"}
+                          {(c.startDate || c.endDate) && ` · ${fmtDate(c.startDate)} – ${fmtDate(c.endDate)}`}
+                        </div>
+                      </div>
+                      <button style={{ ...ghostBtn, padding: "5px 10px", fontSize: 11.5, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setCampModal(c); }}>
+                        <Pencil size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Edit
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{c.accountIds.length}</div>
+                        <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Accounts targeted</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{attributed.length} <span style={{ fontSize: 12, fontWeight: 500, color: C.textMute }}>at {accountsHit}</span></div>
+                        <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Opportunities generated</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{fmtMoneyShort(totalValue)}</div>
+                        <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Pipeline value</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: C.green }}>{won.length}</div>
+                        <div style={{ fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 700 }}>Closed won</div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+
+              <div style={{ marginTop: 32 }}>
+                <h4 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: C.text }}>Sourcing</h4>
+                <p style={{ margin: "0 0 14px", fontSize: 12, color: C.textMute }}>How every opportunity in your pipeline actually got here.</p>
+
+                {(() => {
+                  const scoped = filteredOpps.filter(o => o.sfStatus !== "removed");
+                  const buckets = [...SOURCE_OPTIONS, "Unspecified"];
+                  const bySource = buckets.map(s => {
+                    const opps = scoped.filter(o => (o.source || "Unspecified") === s);
+                    const open = opps.filter(o => OPEN_STAGES.includes(o.stage));
+                    const won = opps.filter(o => o.stage === "Closed Won");
+                    return {
+                      source: s,
+                      opps: opps.sort((a, b) => (a.closeDate || "9999").localeCompare(b.closeDate || "9999")),
+                      openValue: open.reduce((sum, o) => sum + oppTotal(o), 0),
+                      openCount: open.length,
+                      wonValue: won.reduce((sum, o) => sum + oppTotal(o), 0),
+                      wonCount: won.length,
+                    };
+                  });
+                  const totalOpenValue = Math.max(1, bySource.reduce((s, b) => s + b.openValue, 0));
+
+                  return (
+                    <>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+                        {bySource.map(b => (
+                          <Card key={b.source} style={{ padding: "14px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 2, background: SOURCE_COLOR[b.source], display: "inline-block" }} />
+                              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute }}>{b.source}</span>
+                            </div>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>{fmtMoneyShort(b.openValue)}</div>
+                            <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 2 }}>{b.openCount} open · {b.wonCount} won ({fmtMoneyShort(b.wonValue)})</div>
+                          </Card>
+                        ))}
+                      </div>
+
+                      <Card style={{ marginBottom: 20 }}>
+                        <h5 style={{ margin: "0 0 12px", fontSize: 12.5, fontWeight: 700, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.3 }}>Open pipeline mix</h5>
+                        <div style={{ display: "flex", height: 36, borderRadius: 8, overflow: "hidden", gap: 2, marginBottom: 10 }}>
+                          {bySource.filter(b => b.openValue > 0).map(b => (
+                            <div key={b.source} style={{
+                              width: `${(b.openValue / totalOpenValue) * 100}%`, background: SOURCE_COLOR[b.source],
+                              display: "flex", alignItems: "center", justifyContent: "center", minWidth: 40
+                            }}>
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: "#fff" }}>{fmtMoneyShort(b.openValue)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                          {bySource.map(b => (
+                            <span key={b.source} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: C.textSoft }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 2, background: SOURCE_COLOR[b.source], display: "inline-block" }} />
+                              {b.source} {fmtMoneyShort(b.openValue)} ({totalOpenValue > 1 ? ((b.openValue / totalOpenValue) * 100).toFixed(0) : 0}%)
+                            </span>
+                          ))}
+                        </div>
+                      </Card>
+
+                      {bySource.filter(b => b.opps.length > 0).map(b => (
+                        <div key={b.source} style={{ marginBottom: 20 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: SOURCE_COLOR[b.source], display: "inline-block" }} />
+                            <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text }}>{b.source}</h5>
+                            <span style={{ fontSize: 11.5, color: C.textMute }}>{b.opps.length} {b.opps.length === 1 ? "opportunity" : "opportunities"}</span>
+                          </div>
+                          <Card style={{ padding: 0, overflow: "hidden" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr 0.9fr 0.9fr 0.9fr", padding: "9px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC" }}>
+                              <span>Opportunity</span><span>Account</span><span>Stage</span><span>Value</span><span>Close date</span>
+                            </div>
+                            {b.opps.map(o => (
+                              <div key={o.id} onClick={() => setOppModal(o)} style={{
+                                display: "grid", gridTemplateColumns: "1.8fr 1.2fr 0.9fr 0.9fr 0.9fr", padding: "11px 16px",
+                                fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center"
+                              }}>
+                                <span style={{ color: C.text, fontWeight: 600 }}>{o.name}</span>
+                                <span style={{ color: C.textSoft }}>{o.account}</span>
+                                <span><Pill color={STAGE_COLOR[o.stage]} bg={STAGE_COLOR[o.stage] + "1A"}>{o.stage}</Pill></span>
+                                <span style={{ color: C.textSoft, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(oppTotal(o))}</span>
+                                <span style={{ color: C.textSoft }}>{fmtDate(o.closeDate)}</span>
+                              </div>
+                            ))}
+                          </Card>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           )}
 
@@ -3216,6 +4192,7 @@ export default function SalesCommandCenter() {
                     { key: "owner", label: "Owner", options: ["All", ...reps] },
                     { key: "sseSme", label: "SSE / SME", options: ["All", ...taskSseOpts] },
                     { key: "partnerContact", label: "Partner Contact", options: ["All", ...taskPartnerOpts] },
+                    { key: "partnerEngaged", label: "Partner Engaged", options: ["All", ...PARTNER_ENGAGED_OPTIONS] },
                     { key: "isOpp", label: "Opp", options: ["All", "Yes", "No"] },
                     { key: "dealReg", label: "Deal Reg?", options: ["All", ...taskDealRegOpts] },
                     { key: "due", label: "Due date", options: ["All", "Overdue", "Next 7 days", "Next 30 days", "No due date"] },
@@ -3420,26 +4397,16 @@ export default function SalesCommandCenter() {
       {oppModal && (
         <Modal title={oppModal.id ? "Edit opportunity" : "New opportunity"} wide onClose={() => setOppModal(null)}>
           <OpportunityForm
-            initial={oppModal.id ? oppModal : null}
+            initial={oppModal}
             reps={reps}
-            tasks={oppModal.id ? data.tasks.filter(t => normName(t.account) === normName(oppModal.account)) : []}
+            accounts={data.accounts}
+            campaigns={data.campaigns}
+            tasks={oppModal.id ? data.tasks.filter(t => t.oppId === oppModal.id) : []}
             onCancel={() => setOppModal(null)}
-            onSave={(item) => { upsert("opportunities", item); setOppModal(null); }}
+            onSave={(item) => { saveOpportunity(item); setOppModal(null); }}
             onDelete={(id) => { remove("opportunities", id); setOppModal(null); }}
             onOpenTask={(t) => { setOppModal(null); setTaskModal(t); }}
-            onAddTask={() => { const account = oppModal.account; setOppModal(null); setTaskModal({ account }); }}
-          />
-        </Modal>
-      )}
-      {actModal && (
-        <Modal title={actModal.id ? "Edit activity" : "Log activity"} onClose={() => setActModal(null)}>
-          <ActivityForm
-            initial={actModal.id ? actModal : null}
-            reps={reps}
-            opportunities={data.opportunities}
-            onCancel={() => setActModal(null)}
-            onSave={(item) => { upsert("activities", item); setActModal(null); }}
-            onDelete={(id) => { remove("activities", id); setActModal(null); }}
+            onAddTask={() => { const { id: oppId, accountId, account } = oppModal; setOppModal(null); setTaskModal({ oppId, accountId, account }); }}
           />
         </Modal>
       )}
@@ -3449,8 +4416,9 @@ export default function SalesCommandCenter() {
             initial={taskModal}
             reps={reps}
             accounts={data.accounts}
+            opportunities={data.opportunities}
             onCancel={() => setTaskModal(null)}
-            onSave={(item) => { upsert("tasks", item); setTaskModal(null); }}
+            onSave={(item) => { saveTask(item); setTaskModal(null); }}
             onDelete={(id) => { remove("tasks", id); setTaskModal(null); }}
           />
         </Modal>
@@ -3467,6 +4435,18 @@ export default function SalesCommandCenter() {
           />
         </Modal>
       )}
+      {campModal && (
+        <Modal title={campModal.id ? "Edit campaign" : "New campaign"} wide onClose={() => setCampModal(null)}>
+          <CampaignForm
+            initial={campModal.id ? campModal : null}
+            accounts={data.accounts}
+            opportunities={data.opportunities}
+            onCancel={() => setCampModal(null)}
+            onSave={(item) => { upsert("campaigns", item); setCampModal(null); }}
+            onDelete={(id) => { remove("campaigns", id); setCampModal(null); }}
+          />
+        </Modal>
+      )}
       {importOpen && (
         <ImportWizard
           data={data}
@@ -3480,12 +4460,12 @@ export default function SalesCommandCenter() {
             initial={accModal.id ? accModal : null}
             reps={reps}
             computed={accModal.id ? accountComputed(accModal) : null}
-            tasks={accModal.id ? data.tasks.filter(t => normName(t.account) === normName(accModal.name)) : []}
+            tasks={accModal.id ? data.tasks.filter(t => t.accountId ? t.accountId === accModal.id : normName(t.account) === normName(accModal.name)) : []}
             onCancel={() => setAccModal(null)}
             onSave={(item) => { upsert("accounts", item); setAccModal(null); }}
             onDelete={(id) => { remove("accounts", id); setAccModal(null); }}
             onOpenTask={(t) => { setAccModal(null); setTaskModal(t); }}
-            onAddTask={() => { const account = accModal.name; setAccModal(null); setTaskModal({ account }); }}
+            onAddTask={() => { const { id: accountId, name: account } = accModal; setAccModal(null); setTaskModal({ accountId, account }); }}
           />
         </Modal>
       )}
@@ -3502,6 +4482,14 @@ export default function SalesCommandCenter() {
           reps={reps}
           onClose={() => setTaskImportOpen(false)}
           onApply={(next) => { setData(next); setTaskImportOpen(false); }}
+        />
+      )}
+      {oppImportOpen && (
+        <OpportunityImportWizard
+          data={data}
+          reps={reps}
+          onClose={() => setOppImportOpen(false)}
+          onApply={(next) => { setData(next); setOppImportOpen(false); }}
         />
       )}
       {resetConfirmOpen && (
