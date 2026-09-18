@@ -21,6 +21,9 @@ const STAGE_COLOR = {
   "Closed Won": "#0D9488",
   "Closed Lost": "#DC2626",
 };
+const STAGE_PROBABILITY = {
+  "Prospecting": 0.1, "Forecasting": 0.2, "Pipeline": 0.3, "Upside": 0.5, "Strong Upside": 0.7, "Commit": 0.9,
+};
 
 const CATEGORIES = [
   { key: "productMargin", label: "Product margin", color: "#3B82F6" },
@@ -2601,26 +2604,15 @@ export default function SalesCommandCenter() {
   const [accountFilter, setAccountFilter] = useState("All");
   const [accountGroupBy, setAccountGroupBy] = useState("none");
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
-  const toggleAccountExpand = (id) => setExpandedAccounts(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggleAccountExpand = (id) => setExpandedAccounts(prev => prev.has(id) ? new Set() : new Set([id]));
   const [expandedTasks, setExpandedTasks] = useState(new Set());
-  const toggleTaskExpand = (id) => setExpandedTasks(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggleTaskExpand = (id) => setExpandedTasks(prev => prev.has(id) ? new Set() : new Set([id]));
   const [expandedOpps, setExpandedOpps] = useState(new Set());
-  const toggleOppExpand = (id) => setExpandedOpps(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggleOppExpand = (id) => setExpandedOpps(prev => prev.has(id) ? new Set() : new Set([id]));
   const [pendingRestore, setPendingRestore] = useState(null);
   const [restoreError, setRestoreError] = useState("");
   const backupFileRef = useRef(null);
+  const restoreExcelFileRef = useRef(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => { setPeriod(currentQuarter()); }, [loaded]);
@@ -2728,6 +2720,53 @@ export default function SalesCommandCenter() {
     URL.revokeObjectURL(url);
   };
 
+  const exportExcelBackup = () => {
+    const wb = XLSX.utils.book_new();
+    const addSheet = (name, rows) => {
+      const sheet = XLSX.utils.json_to_sheet(rows && rows.length ? rows : [{}]);
+      XLSX.utils.book_append_sheet(wb, sheet, name.slice(0, 31));
+    };
+
+    addSheet("Accounts", data.accounts.map(a => ({
+      Account: a.name, Territory: a.territory, Tier: a.tier, Priority: a.priority, Status: a.status, CD: a.cd, Rep: a.rep,
+      "MD Priority": a.mdPriority ? "Yes" : "", "Ahead Strategic": a.strategic ? "Yes" : "", "Met Customer": a.metCustomer ? "Yes" : "No",
+      ServiceNow: a.flagServiceNow ? "X" : "", "SN Rep": a.snRep, "SN Status": a.snStatus, "SN Priority": a.snPriority, "SN Contacts": a.snContacts, "SN Notes": a.snNotes,
+      Dynatrace: a.flagDynatrace ? "X" : "", "DT Rep": a.dtRep, PSM: a.dtPsm, "DT Status": a.dtStatus, "DT Priority": a.dtPriority, "DT Contacts": a.dtContacts, "DT Notes": a.dtNotes,
+      "Tanium Rev List": a.flagTaniumRevList ? "X" : "", "Tanium PTP": a.flagTaniumPtp ? "X" : "", "Tanium Target": a.flagTaniumTarget ? "X" : "",
+      "Tanium Rep": a.taniumRep, "Tanium Status": a.taniumStatus, "Tanium Priority": a.taniumPriority, "Tanium Contacts": a.taniumContacts, "Tanium Notes": a.taniumNotes,
+      "NeuBird AI": a.flagNeuBird ? "X" : "", "NeuBird Rep": a.neubirdRep, "NeuBird Status": a.neubirdStatus, "NeuBird Priority": a.neubirdPriority, "NeuBird Contacts": a.neubirdContacts, "NeuBird Notes": a.neubirdNotes,
+      Grafana: a.flagGrafana ? "X" : "", Observability: a.flagObservability ? "X" : "", "DT Dedicated Prog": a.flagDtDedicatedProg ? "X" : "",
+      Notes: a.notes,
+    })));
+
+    addSheet("Opportunities", data.opportunities.map(o => ({
+      Name: o.name, Account: o.account, Stage: o.stage, "Close Date": o.closeDate, Owner: o.rep,
+      "Commissionable Margin": o.commissionableMargin, Source: o.source, "Forecast Category": o.forecastCategory,
+      Campaign: o.campaignId ? (data.campaigns.find(c => c.id === o.campaignId)?.name || "") : "",
+      "Next Step": o.nextStep, Notes: o.notes, "Salesforce ID": o.sfId || "", "Record ID": o.id,
+    })));
+
+    addSheet("Tasks", data.tasks.map(t => ({
+      Name: t.title, Account: t.account, Opportunity: t.oppId ? (data.opportunities.find(o => o.id === t.oppId)?.name || "") : "",
+      CD: t.cd, Owner: t.rep, "SSE / SME": t.sseSme,
+      "Partner Contact": t.partnerContact, "Partner Engaged": t.partnerEngaged, Priority: t.priority,
+      "Due Date": t.dueDate, Status: t.status, Opp: t.isOpp ? "Yes" : "", "Deal Reg": t.dealReg, Notes: t.notes,
+    })));
+
+    addSheet("Campaigns", data.campaigns.map(c => ({
+      Name: c.name, BDR: c.bdr, Status: c.status, "Start Date": c.startDate, "End Date": c.endDate,
+      Accounts: c.accountIds.map(id => data.accounts.find(a => a.id === id)?.name).filter(Boolean).join(", "),
+      Notes: c.notes,
+    })));
+
+    addSheet("Goals", data.goals.map(g => ({
+      Rep: g.rep, Period: g.period,
+      ...Object.fromEntries(CATEGORIES.map(c => [c.label + " Target", g[c.key + "Target"]])),
+    })));
+
+    XLSX.writeFile(wb, `${(data.orgName || "sales-command-center").replace(/\s+/g, "-").toLowerCase()}-backup-${todayStr()}.xlsx`);
+  };
+
   const handleBackupFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -2750,6 +2789,137 @@ export default function SalesCommandCenter() {
     if (!pendingRestore) return;
     setData(mergeLoadedData(pendingRestore));
     setPendingRestore(null);
+  };
+
+  const handleExcelBackupFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setRestoreError("");
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: "array", cellDates: false });
+        const sheetRows = (name) => {
+          const sheet = wb.Sheets[name];
+          return sheet ? XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "" }) : [];
+        };
+        const str = (v) => (v === undefined || v === null ? "" : v.toString().trim());
+        const bool = (v) => ["yes", "x", "true", "1"].includes(str(v).toLowerCase());
+
+        // Accounts first — everything else links to these by name.
+        let accounts = [];
+        const accountIdByName = new Map();
+        sheetRows("Accounts").forEach(r => {
+          const name = str(r["Account"]);
+          if (!name) return;
+          const acc = {
+            id: uid(), name, territory: str(r["Territory"]), tier: str(r["Tier"]), priority: str(r["Priority"]) || "Moderate",
+            status: str(r["Status"]) || "Active", cd: str(r["CD"]), rep: str(r["Rep"]), notes: str(r["Notes"]),
+            mdPriority: bool(r["MD Priority"]), strategic: bool(r["Ahead Strategic"]), metCustomer: bool(r["Met Customer"]),
+            flagServiceNow: bool(r["ServiceNow"]), snRep: str(r["SN Rep"]), snStatus: str(r["SN Status"]), snPriority: str(r["SN Priority"]), snContacts: str(r["SN Contacts"]), snNotes: str(r["SN Notes"]),
+            flagDynatrace: bool(r["Dynatrace"]), dtRep: str(r["DT Rep"]), dtPsm: str(r["PSM"]), dtStatus: str(r["DT Status"]), dtPriority: str(r["DT Priority"]), dtContacts: str(r["DT Contacts"]), dtNotes: str(r["DT Notes"]),
+            flagTaniumRevList: bool(r["Tanium Rev List"]), flagTaniumPtp: bool(r["Tanium PTP"]), flagTaniumTarget: bool(r["Tanium Target"]),
+            taniumRep: str(r["Tanium Rep"]), taniumStatus: str(r["Tanium Status"]), taniumPriority: str(r["Tanium Priority"]), taniumContacts: str(r["Tanium Contacts"]), taniumNotes: str(r["Tanium Notes"]),
+            flagNeuBird: bool(r["NeuBird AI"]), neubirdRep: str(r["NeuBird Rep"]), neubirdStatus: str(r["NeuBird Status"]), neubirdPriority: str(r["NeuBird Priority"]), neubirdContacts: str(r["NeuBird Contacts"]), neubirdNotes: str(r["NeuBird Notes"]),
+            flagGrafana: bool(r["Grafana"]), flagObservability: bool(r["Observability"]), flagDtDedicatedProg: bool(r["DT Dedicated Prog"]),
+            createdAt: todayStr(),
+          };
+          accounts.push(acc);
+          accountIdByName.set(normName(name), acc.id);
+        });
+        const ensureAccountId = (name) => {
+          const key = normName(name);
+          if (!key) return null;
+          if (accountIdByName.has(key)) return accountIdByName.get(key);
+          const acc = { id: uid(), name: str(name), territory: "", tier: "", priority: "Moderate", status: "Active", cd: "", rep: "", notes: "", createdAt: todayStr() };
+          accounts.push(acc);
+          accountIdByName.set(key, acc.id);
+          return acc.id;
+        };
+
+        // Campaigns next — only need account names resolved.
+        const campaigns = [];
+        const campaignIdByName = new Map();
+        sheetRows("Campaigns").forEach(r => {
+          const name = str(r["Name"]);
+          if (!name) return;
+          const accountNames = str(r["Accounts"]).split(",").map(s => s.trim()).filter(Boolean);
+          const camp = {
+            id: uid(), name, bdr: str(r["BDR"]), status: CAMPAIGN_STATUSES.includes(str(r["Status"])) ? str(r["Status"]) : "Planning",
+            startDate: normalizeDate(r["Start Date"]), endDate: normalizeDate(r["End Date"]), notes: str(r["Notes"]),
+            accountIds: accountNames.map(n => ensureAccountId(n)).filter(Boolean),
+            createdAt: todayStr(),
+          };
+          campaigns.push(camp);
+          campaignIdByName.set(normName(name), camp.id);
+        });
+
+        // Opportunities — resolve account + campaign by name.
+        const opportunities = [];
+        const oppIdByNameAccount = new Map();
+        sheetRows("Opportunities").forEach(r => {
+          const name = str(r["Name"]);
+          const accountName = str(r["Account"]);
+          if (!name || !accountName) return;
+          const accountId = ensureAccountId(accountName);
+          const stage = STAGES.find(s => s.toLowerCase() === str(r["Stage"]).toLowerCase()) || "Prospecting";
+          const campaignName = str(r["Campaign"]);
+          const opp = {
+            id: uid(), name, account: accountName, accountId, stage,
+            closeDate: normalizeDate(r["Close Date"]), rep: str(r["Owner"]) || "Unassigned",
+            commissionableMargin: numOrZero(r["Commissionable Margin"]),
+            source: SOURCE_OPTIONS.find(s => s.toLowerCase() === str(r["Source"]).toLowerCase()) || "",
+            forecastCategory: FORECAST_CATS.find(f => f.toLowerCase() === str(r["Forecast Category"]).toLowerCase()) || suggestForecast(stage),
+            campaignId: campaignName ? (campaignIdByName.get(normName(campaignName)) || "") : "",
+            nextStep: str(r["Next Step"]), notes: str(r["Notes"]), sfId: str(r["Salesforce ID"]) || undefined,
+            lastStageChange: todayStr(), createdAt: todayStr(),
+          };
+          opportunities.push(opp);
+          oppIdByNameAccount.set(normName(name) + "|" + normName(accountName), opp.id);
+        });
+
+        // Tasks — resolve account + specific opportunity by name.
+        const tasks = [];
+        sheetRows("Tasks").forEach(r => {
+          const title = str(r["Name"]);
+          if (!title) return;
+          const accountName = str(r["Account"]);
+          const accountId = accountName ? ensureAccountId(accountName) : null;
+          const oppName = str(r["Opportunity"]);
+          const oppId = oppName && accountName ? (oppIdByNameAccount.get(normName(oppName) + "|" + normName(accountName)) || "") : "";
+          tasks.push({
+            id: uid(), title, account: accountName, accountId, oppId,
+            cd: str(r["CD"]), rep: str(r["Owner"]), sseSme: str(r["SSE / SME"]),
+            partnerContact: str(r["Partner Contact"]), partnerEngaged: str(r["Partner Engaged"]),
+            priority: PRIORITIES.includes(str(r["Priority"])) ? str(r["Priority"]) : "Moderate",
+            dueDate: normalizeDate(r["Due Date"]), status: TASK_STATUSES.includes(str(r["Status"])) ? str(r["Status"]) : "Not Started",
+            isOpp: oppId ? true : bool(r["Opp"]), dealReg: str(r["Deal Reg"]), notes: str(r["Notes"]),
+          });
+        });
+
+        // Goals — independent of the rest.
+        const goals = [];
+        sheetRows("Goals").forEach(r => {
+          const rep = str(r["Rep"]);
+          const period = str(r["Period"]);
+          if (!rep || !period) return;
+          const goal = { id: uid(), rep, period };
+          CATEGORIES.forEach(c => { goal[c.key + "Target"] = numOrZero(r[c.label + " Target"]); });
+          goals.push(goal);
+        });
+
+        if (accounts.length === 0 && opportunities.length === 0 && tasks.length === 0 && campaigns.length === 0 && goals.length === 0) {
+          setRestoreError("Couldn't find any recognizable data in that workbook — make sure it's the Excel backup this tool generated.");
+          return;
+        }
+
+        setPendingRestore({ ...data, accounts, opportunities, tasks, campaigns, goals });
+      } catch (err) {
+        setRestoreError("Couldn't read that file. Make sure it's the .xlsx backup downloaded from this tool.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
   };
 
   const performReset = () => {
@@ -2781,6 +2951,15 @@ export default function SalesCommandCenter() {
   const coverage = goalRemaining > 0 ? openPipelineValue / goalRemaining : (openPipelineValue > 0 ? coverageTarget : 0);
   const coverageGap = Math.max(coverageTarget * goalRemaining - openPipelineValue, 0);
   const coverageTone = coverage < coverageTarget * 0.5 ? "red" : coverage < coverageTarget ? "amber" : "green";
+
+  // ---- Executive summary metrics (Pipeline / Forecast top sections) ----
+  const weightedPipeline = openOpps.reduce((s, o) => s + oppTotal(o) * (STAGE_PROBABILITY[o.stage] ?? 0.1), 0);
+  const closedWonAll = activeOpps.filter(o => o.stage === "Closed Won");
+  const closedLostAll = activeOpps.filter(o => o.stage === "Closed Lost");
+  const winRateDenom = closedWonAll.length + closedLostAll.length;
+  const winRate = winRateDenom > 0 ? (closedWonAll.length / winRateDenom) * 100 : null;
+  const avgDealSize = openOpps.length > 0 ? openPipelineValue / openOpps.length : 0;
+  const topOpenOpps = openOpps.slice().sort((a, b) => oppTotal(b) - oppTotal(a)).slice(0, 5);
 
   const staleDays = data.settings.staleDays || 30;
   const staleOpps = openOpps.filter(o => o.lastStageChange && daysSince(o.lastStageChange) >= staleDays);
@@ -3075,7 +3254,7 @@ export default function SalesCommandCenter() {
   const taskTableHeader = (
     <div style={{
       display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr",
-      padding: "10px 16px", fontSize: 10.5, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.5,
+      padding: "11px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.7,
       borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
     }}>
       <span></span><span>Name</span><span>Account</span><span>CD</span><span>Owner</span><span>Priority</span><span>Due date</span><span>Status</span>
@@ -3091,26 +3270,26 @@ export default function SalesCommandCenter() {
       <div key={t.id}>
         <div onClick={() => toggleTaskExpand(t.id)} style={{
           display: "grid", gridTemplateColumns: "20px 1.3fr 1fr 0.7fr 0.8fr 0.8fr 0.9fr 1fr",
-          padding: "13px 16px", borderBottom: hasNotes ? "none" : `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
+          padding: "14px 16px", borderBottom: hasNotes ? "none" : `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
           cursor: "pointer", alignItems: "center", gap: 6, background: C.card, transition: "background 0.1s ease"
         }}>
           <ChevronRight size={14} color={C.textMute} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s ease" }} />
           <span style={{
-            fontSize: 13.5, fontWeight: 600, color: t.status === "Done" ? C.textMute : C.text,
+            fontSize: 14, fontWeight: 600, color: t.status === "Done" ? C.textMute : C.text, letterSpacing: -0.1, lineHeight: 1.3,
             textDecoration: t.status === "Done" ? "line-through" : "none"
           }}>{t.title}</span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.account || "—"}</span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.cd || "—"}</span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.rep || "—"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 500, color: C.text, lineHeight: 1.3 }}>{t.account || "—"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 500, color: C.text, lineHeight: 1.3 }}>{t.cd || "—"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 500, color: C.text, lineHeight: 1.3 }}>{t.rep || "—"}</span>
           <span><Pill color={PRIORITY_COLOR[t.priority] || C.textMute} bg={PRIORITY_BG[t.priority] || "#F1F5F9"}>{t.priority}</Pill></span>
-          <span style={{ fontSize: 13, color: overdue ? C.red : C.text, fontWeight: overdue ? 700 : 500 }}>{fmtDate(t.dueDate)}</span>
+          <span style={{ fontSize: 12.5, color: overdue ? C.red : C.text, fontWeight: overdue ? 700 : 500, lineHeight: 1.3 }}>{fmtDate(t.dueDate)}</span>
           <span onClick={e => e.stopPropagation()}>
             <select
               value={t.status}
               onChange={e => upsert("tasks", { ...t, status: e.target.value })}
               style={{
-                fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, border: "none", cursor: "pointer",
-                color: TASK_STATUS_COLOR[t.status], background: TASK_STATUS_BG[t.status]
+                fontSize: 11, fontWeight: 700, padding: "5px 9px", borderRadius: 999, border: "none", cursor: "pointer",
+                color: TASK_STATUS_COLOR[t.status], background: TASK_STATUS_BG[t.status], letterSpacing: 0.2
               }}
             >
               {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -3119,31 +3298,31 @@ export default function SalesCommandCenter() {
         </div>
         {hasNotes && (
           <div onClick={() => toggleTaskExpand(t.id)} style={{
-            padding: "0 16px 12px 42px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
+            padding: "0 16px 13px 42px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
             background: C.card, cursor: "pointer"
           }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginRight: 6 }}>Notes</span>
-            <span style={{ fontSize: 12.5, fontWeight: 400, color: C.textSoft, whiteSpace: "pre-wrap" }}>{t.notes}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.5, marginRight: 7 }}>Notes</span>
+            <span style={{ fontSize: 12.5, fontWeight: 400, color: C.textSoft, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{t.notes}</span>
           </div>
         )}
         {expanded && (
-          <div style={{ padding: "16px 16px 18px 40px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`, background: "#F8FAFC" }}>
+          <div style={{ padding: "17px 16px 19px 40px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`, background: "#F8FAFC" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 14, flex: 1 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 16, flex: 1 }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>SSE / SME</div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.sseSme || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>SSE / SME</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text, lineHeight: 1.35 }}>{t.sseSme || "—"}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Partner Contact</div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.partnerContact || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Partner Contact</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text, lineHeight: 1.35 }}>{t.partnerContact || "—"}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Partner Engaged</div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.partnerEngaged || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Partner Engaged</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text, lineHeight: 1.35 }}>{t.partnerEngaged || "—"}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Opportunity</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Opportunity</div>
                   <div>
                     {(() => {
                       const linkedOpp = t.oppId ? data.opportunities.find(o => o.id === t.oppId) : null;
@@ -3164,17 +3343,13 @@ export default function SalesCommandCenter() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Deal Reg?</div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{t.dealReg || "—"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Deal Reg?</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text, lineHeight: 1.35 }}>{t.dealReg || "—"}</div>
                 </div>
               </div>
-              <button style={{ ...ghostBtn, padding: "6px 12px", fontSize: 12, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setTaskModal(t); }}>
+              <button style={{ ...ghostBtn, padding: "6px 12px", fontSize: 12, fontWeight: 600, flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setTaskModal(t); }}>
                 <Pencil size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Edit full details
               </button>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }}>Notes / Next steps</div>
-              <div style={{ fontSize: 13, fontWeight: 400, color: C.text, whiteSpace: "pre-wrap" }}>{t.notes || "—"}</div>
             </div>
           </div>
         )}
@@ -3184,11 +3359,11 @@ export default function SalesCommandCenter() {
 
   const oppTableHeader = (
     <div style={{
-      display: "grid", gridTemplateColumns: "20px 2fr 0.9fr 1fr 0.9fr 0.8fr",
+      display: "grid", gridTemplateColumns: "20px 1.7fr 1.1fr 0.9fr 1fr 0.9fr 0.8fr",
       padding: "10px 16px", fontSize: 10.5, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.5,
       borderBottom: `1px solid ${C.border}`, fontWeight: 700, background: "#F8FAFC"
     }}>
-      <span></span><span>Name</span><span>Stage</span><span>Commissionable Margin</span><span>Close date</span><span>Forecast</span>
+      <span></span><span>Name</span><span>Account</span><span>Stage</span><span>Commissionable Margin</span><span>Close date</span><span>Forecast</span>
     </div>
   );
 
@@ -3200,7 +3375,7 @@ export default function SalesCommandCenter() {
     return (
       <div key={o.id}>
         <div onClick={() => toggleOppExpand(o.id)} style={{
-          display: "grid", gridTemplateColumns: "20px 2fr 0.9fr 1fr 0.9fr 0.8fr",
+          display: "grid", gridTemplateColumns: "20px 1.7fr 1.1fr 0.9fr 1fr 0.9fr 0.8fr",
           padding: "13px 16px", borderBottom: `1px solid ${C.border}`, borderLeft: `3px solid ${rowAccent}`,
           cursor: "pointer", alignItems: "center", gap: 6, background: C.card, opacity: o.sfStatus === "removed" ? 0.55 : 1
         }}>
@@ -3208,6 +3383,7 @@ export default function SalesCommandCenter() {
           <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>
             {o.name}{o.sfId && <FileSpreadsheet size={11} color={C.textMute} />}
           </span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{o.account}</span>
           <span>
             {o.sfStatus === "removed"
               ? <Pill color={C.amber} bg={C.amberBg}>Removed</Pill>
@@ -3691,25 +3867,94 @@ export default function SalesCommandCenter() {
 
           {tab === "pipeline" && (
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Revenue by stage</h4>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>Pipeline</h4>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textMute }}>Current state of the open book of business.</p>
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={ghostBtn} onClick={() => setOppImportOpen(true)}><UploadCloud size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Import from Excel</button>
                   <button style={primaryBtn} onClick={() => setOppModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />Add opportunity</button>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 22 }}>
-                {allStageSummary.map(g => (
-                  <Card key={g.key} style={{ padding: "14px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 2, background: g.color, display: "inline-block" }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute }}>{g.label}</span>
-                    </div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtMoneyShort(g.sum)}</div>
-                    <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 2 }}>{g.count} {g.count === 1 ? "deal" : "deals"}</div>
-                  </Card>
-                ))}
+
+              {/* Executive KPI strip */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 16 }}>
+                <Card style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Open pipeline</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtMoneyShort(openPipelineValue)}</div>
+                  <div style={{ fontSize: 11, color: C.textMute, marginTop: 2 }}>{openOpps.length} open {openOpps.length === 1 ? "deal" : "deals"}</div>
+                </Card>
+                <Card style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Weighted pipeline</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtMoneyShort(weightedPipeline)}</div>
+                  <div style={{ fontSize: 11, color: C.textMute, marginTop: 2 }}>Probability-adjusted by stage</div>
+                </Card>
+                <Card style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Coverage</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: coverageTone === "green" ? C.green : coverageTone === "amber" ? C.amber : C.red }}>{coverage.toFixed(1)}x</div>
+                  <div style={{ fontSize: 11, color: C.textMute, marginTop: 2 }}>Target {coverageTarget.toFixed(1)}x of goal remaining</div>
+                </Card>
+                <Card style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Avg deal size</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtMoneyShort(avgDealSize)}</div>
+                  <div style={{ fontSize: 11, color: C.textMute, marginTop: 2 }}>Across open deals</div>
+                </Card>
+                <Card style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Win rate</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{winRate === null ? "—" : `${winRate.toFixed(0)}%`}</div>
+                  <div style={{ fontSize: 11, color: C.textMute, marginTop: 2 }}>{winRateDenom > 0 ? `${closedWonAll.length} won / ${closedLostAll.length} lost` : "No closed deals yet"}</div>
+                </Card>
               </div>
+
+              {/* Stage funnel */}
+              <Card style={{ marginBottom: 16 }}>
+                <h5 style={{ margin: "0 0 14px", fontSize: 12.5, fontWeight: 700, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.3 }}>Funnel by stage</h5>
+                {(() => {
+                  const funnelStages = OPEN_STAGES;
+                  const maxSum = Math.max(1, ...allStageSummary.filter(g => funnelStages.includes(g.key)).map(g => g.sum));
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {allStageSummary.filter(g => funnelStages.includes(g.key)).map(g => (
+                        <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 110, fontSize: 12, fontWeight: 600, color: C.text, flexShrink: 0 }}>{g.label}</div>
+                          <div style={{ flex: 1, background: "#F1F5F9", borderRadius: 6, height: 26, position: "relative", overflow: "hidden" }}>
+                            <div style={{
+                              width: `${Math.max((g.sum / maxSum) * 100, g.sum > 0 ? 4 : 0)}%`, height: "100%", background: g.color,
+                              borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 8, minWidth: g.sum > 0 ? 46 : 0, transition: "width 0.2s ease"
+                            }}>
+                              {g.sum > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>{fmtMoneyShort(g.sum)}</span>}
+                            </div>
+                          </div>
+                          <div style={{ width: 70, fontSize: 11.5, color: C.textMute, textAlign: "right", flexShrink: 0 }}>{g.count} {g.count === 1 ? "deal" : "deals"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Card>
+
+              {/* Top open deals */}
+              {topOpenOpps.length > 0 && (
+                <Card style={{ marginBottom: 22, padding: 0, overflow: "hidden" }}>
+                  <h5 style={{ margin: 0, padding: "14px 16px 10px", fontSize: 12.5, fontWeight: 700, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.3 }}>Top open deals</h5>
+                  {topOpenOpps.map((o, i) => (
+                    <div key={o.id} onClick={() => setOppModal(o)} style={{
+                      display: "flex", alignItems: "center", gap: 12, padding: "10px 16px",
+                      borderTop: `1px solid ${C.border}`, cursor: "pointer"
+                    }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.textMute, width: 16 }}>{i + 1}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</div>
+                        <div style={{ fontSize: 11.5, color: C.textMute }}>{o.account}</div>
+                      </span>
+                      <Pill color={STAGE_COLOR[o.stage]} bg={STAGE_COLOR[o.stage] + "1A"}>{o.stage}</Pill>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 80, textAlign: "right" }}>{fmtMoneyShort(oppTotal(o))}</span>
+                    </div>
+                  ))}
+                </Card>
+              )}
+
               {stageGroups.length === 0 && (
                 <Card style={{ padding: "20px", textAlign: "center", color: C.textMute, fontSize: 13, marginBottom: 22 }}>No opportunities yet. Add one or sync from Salesforce.</Card>
               )}
@@ -3722,24 +3967,8 @@ export default function SalesCommandCenter() {
                     <span style={{ fontSize: 11.5, color: C.textMute }}>{g.opps.length} {g.opps.length === 1 ? "deal" : "deals"} · {fmtMoneyShort(g.sum)}</span>
                   </div>
                   <Card style={{ padding: 0, overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 0.8fr 0.8fr", padding: "9px 16px", fontSize: 10.5, color: C.textMute, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
-                      <span>Opportunity</span><span>Account</span><span>Commissionable Margin</span><span>Close date</span><span>Forecast</span>
-                    </div>
-                    {g.opps.map(o => (
-                      <div key={o.id} onClick={() => setOppModal(o)} style={{
-                        display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 0.8fr 0.8fr", padding: "11px 16px",
-                        fontSize: 12.5, borderBottom: `1px solid ${C.border}`, cursor: "pointer", alignItems: "center",
-                        opacity: o.sfStatus === "removed" ? 0.55 : 1
-                      }}>
-                        <span style={{ color: C.text, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                          {o.name}{o.sfId && <FileSpreadsheet size={11} color={C.textMute} />}
-                        </span>
-                        <span style={{ color: C.textSoft }}>{o.account}</span>
-                        <span style={{ color: C.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtMoneyShort(oppTotal(o))}</span>
-                        <span style={{ color: o.closeDate && daysUntil(o.closeDate) < 0 && OPEN_STAGES.includes(o.stage) ? C.red : C.textSoft }}>{fmtDate(o.closeDate)}</span>
-                        <span>{OPEN_STAGES.includes(o.stage) && <Pill color={FORECAST_COLOR[o.forecastCategory || "Not Forecasted"]} bg={FORECAST_COLOR[o.forecastCategory || "Not Forecasted"] + "1A"}>{o.forecastCategory || "Not Forecasted"}</Pill>}</span>
-                      </div>
-                    ))}
+                    {oppTableHeader}
+                    {g.opps.map(o => renderOpportunityRow(o))}
                   </Card>
                 </div>
               ))}
@@ -3749,7 +3978,10 @@ export default function SalesCommandCenter() {
           {tab === "forecast" && (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 10 }}>
-                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Forecast totals — {forecastPeriodLabel}</h4>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>Forecast</h4>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textMute }}>{forecastPeriodLabel} — what's committed, what's stretch, and what's still uncalled.</p>
+                </div>
                 <button style={primaryBtn} onClick={() => setOppModal({})}><Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />Add opportunity</button>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
@@ -3770,18 +4002,82 @@ export default function SalesCommandCenter() {
                   ))}
                 </select>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 22 }}>
-                {forecastGroups.map(g => (
-                  <Card key={g.key} style={{ padding: "14px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 2, background: g.color, display: "inline-block" }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute }}>{g.label}</span>
+
+              {(() => {
+                const committedSum = forecastGroups.find(g => g.key === "Commit")?.sum || 0;
+                const calledSum = forecastGroups.filter(g => g.key !== "Not Forecasted").reduce((s, g) => s + g.sum, 0);
+                const uncalledSum = forecastGroups.find(g => g.key === "Not Forecasted")?.sum || 0;
+                const periodGoal = forecastPeriodType === "quarter"
+                  ? data.goals.filter(g => g.period === forecastPeriodValue && repScope.includes(g.rep))
+                      .reduce((s, g) => s + CATEGORIES.reduce((cs, c) => cs + (Number(g[c.key + "Target"]) || 0), 0), 0)
+                  : null;
+                const hasPeriodGoal = periodGoal !== null && periodGoal > 0;
+                const commitPctOfGoal = hasPeriodGoal ? (committedSum / periodGoal) * 100 : null;
+                const totalMix = Math.max(1, forecastGroups.reduce((s, g) => s + g.sum, 0));
+
+                return (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: hasPeriodGoal ? "repeat(4, 1fr)" : "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+                      <Card style={{ padding: "14px 16px" }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Called (Commit + Gut + Stretch)</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtMoneyShort(calledSum)}</div>
+                      </Card>
+                      <Card style={{ padding: "14px 16px" }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Commit only</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: FORECAST_COLOR.Commit }}>{fmtMoneyShort(committedSum)}</div>
+                      </Card>
+                      <Card style={{ padding: "14px 16px" }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Not yet forecasted</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: C.textMute }}>{fmtMoneyShort(uncalledSum)}</div>
+                      </Card>
+                      {hasPeriodGoal && (
+                        <Card style={{ padding: "14px 16px" }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: C.textMute, marginBottom: 6 }}>Commit vs. quarter goal</div>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: commitPctOfGoal >= 100 ? C.green : commitPctOfGoal >= 75 ? C.amber : C.red }}>{commitPctOfGoal.toFixed(0)}%</div>
+                        </Card>
+                      )}
                     </div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmtMoneyShort(g.sum)}</div>
-                    <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 2 }}>{g.opps.length} open {g.opps.length === 1 ? "deal" : "deals"}</div>
-                  </Card>
-                ))}
-              </div>
+
+                    <Card style={{ marginBottom: 16 }}>
+                      <h5 style={{ margin: "0 0 12px", fontSize: 12.5, fontWeight: 700, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.3 }}>Confidence mix</h5>
+                      <div style={{ display: "flex", height: 36, borderRadius: 8, overflow: "hidden", gap: 2, marginBottom: 10 }}>
+                        {forecastGroups.filter(g => g.sum > 0).map(g => (
+                          <div key={g.key} style={{
+                            width: `${(g.sum / totalMix) * 100}%`, background: g.color,
+                            display: "flex", alignItems: "center", justifyContent: "center", minWidth: 44
+                          }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: "#fff" }}>{fmtMoneyShort(g.sum)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                        {forecastGroups.map(g => (
+                          <span key={g.key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: C.textSoft }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: g.color, display: "inline-block" }} />
+                            {g.label} {fmtMoneyShort(g.sum)} ({totalMix > 1 ? ((g.sum / totalMix) * 100).toFixed(0) : 0}%)
+                          </span>
+                        ))}
+                      </div>
+                    </Card>
+
+                    {hasPeriodGoal && (
+                      <Card style={{ marginBottom: 16 }}>
+                        <h5 style={{ margin: "0 0 12px", fontSize: 12.5, fontWeight: 700, color: C.textSoft, textTransform: "uppercase", letterSpacing: 0.3 }}>Goal attainment breakdown</h5>
+                        {[["Goal", periodGoal, C.textMute], ["Commit", committedSum, FORECAST_COLOR.Commit], ["Called (Commit + Gut + Stretch)", calledSum, C.blue]].map(([label, val, color]) => (
+                          <div key={label} style={{ marginBottom: 10 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.textSoft, marginBottom: 3 }}>
+                              <span>{label}</span><span style={{ fontWeight: 700, color: C.text }}>{fmtMoneyShort(val)}</span>
+                            </div>
+                            <div style={{ height: 10, background: "#F1F5F9", borderRadius: 999, overflow: "hidden" }}>
+                              <div style={{ width: `${Math.min((val / periodGoal) * 100, 100)}%`, height: "100%", background: color, borderRadius: 999 }} />
+                            </div>
+                          </div>
+                        ))}
+                      </Card>
+                    )}
+                  </>
+                );
+              })()}
 
               {forecastGroups.map(g => (
                 <div key={g.key} style={{ marginBottom: 22 }}>
@@ -4343,11 +4639,15 @@ export default function SalesCommandCenter() {
               <h4 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4, marginTop: 10 }}>Backup & restore</h4>
               <p style={{ fontSize: 12.5, color: C.textSoft, marginBottom: 12 }}>
                 Download everything in this command center as a file you keep yourself — a safety net independent of Claude's storage.
+                Both JSON and Excel backups can be restored; restoring replaces your accounts, opportunities, tasks, campaigns, and goals with what's in the file (org structure and settings are left as-is).
               </p>
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                <button style={ghostBtn} onClick={exportBackup}><UploadCloud size={13} style={{ verticalAlign: -2, marginRight: 6, transform: "rotate(180deg)" }} />Download backup</button>
-                <button style={ghostBtn} onClick={() => backupFileRef.current?.click()}><RefreshCw size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Restore from backup</button>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                <button style={ghostBtn} onClick={exportBackup}><UploadCloud size={13} style={{ verticalAlign: -2, marginRight: 6, transform: "rotate(180deg)" }} />Download backup (JSON)</button>
+                <button style={ghostBtn} onClick={exportExcelBackup}><FileSpreadsheet size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Download as Excel</button>
+                <button style={ghostBtn} onClick={() => backupFileRef.current?.click()}><RefreshCw size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Restore from JSON</button>
+                <button style={ghostBtn} onClick={() => restoreExcelFileRef.current?.click()}><RefreshCw size={13} style={{ verticalAlign: -2, marginRight: 6 }} />Restore from Excel</button>
                 <input ref={backupFileRef} type="file" accept=".json" onChange={handleBackupFile} style={{ display: "none" }} />
+                <input ref={restoreExcelFileRef} type="file" accept=".xlsx,.xls" onChange={handleExcelBackupFile} style={{ display: "none" }} />
               </div>
               {restoreError && <div style={{ fontSize: 12.5, color: C.red, marginBottom: 12 }}>{restoreError}</div>}
               {pendingRestore && (
@@ -4355,7 +4655,7 @@ export default function SalesCommandCenter() {
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>Confirm restore</div>
                   <div style={{ fontSize: 12.5, color: "#78350F", marginBottom: 10 }}>
                     This file contains {(pendingRestore.opportunities || []).length} opportunities, {(pendingRestore.tasks || []).length} tasks,
-                    {" "}{(pendingRestore.accounts || []).length} accounts, and {(pendingRestore.goals || []).length} goals.
+                    {" "}{(pendingRestore.accounts || []).length} accounts, {(pendingRestore.campaigns || []).length} campaigns, and {(pendingRestore.goals || []).length} goals.
                     Restoring will <strong>replace everything currently in this command center</strong> — this can't be undone.
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -4515,4 +4815,3 @@ export default function SalesCommandCenter() {
     </div>
   );
 }
-
